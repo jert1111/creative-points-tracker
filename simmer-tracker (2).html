@@ -1,0 +1,1693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Simmer Creative Team Tracker</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet"/>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f3f4f6; }
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number] { -moz-appearance: textfield; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script>
+    const SUPABASE_URL = "https://wybutterksurcrpgphlv.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5YnV0dGVya3N1cmNycGdwaGx2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1MjkwMTUsImV4cCI6MjA5MDEwNTAxNX0.S_fg-tkSMprT6q6MmSv6_yIxi85ohcmsZ7qJw-M7ooE";
+  </script>
+  <script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useCallback } = React;
+const { Component } = React;
+
+
+class ErrorBoundary extends Component {
+  constructor(props){super(props);this.state={error:null};}
+  static getDerivedStateFromError(e){return{error:e};}
+  render(){
+    if(this.state.error)return(
+      <div style={{padding:32,fontFamily:'monospace',background:'#fff1f2',minHeight:'100vh'}}>
+        <h2 style={{color:'#be123c',marginBottom:16}}>⚠️ Runtime Error</h2>
+        <pre style={{color:'#9f1239',whiteSpace:'pre-wrap',fontSize:13}}>{this.state.error?.message}</pre>
+        <pre style={{color:'#6b7280',whiteSpace:'pre-wrap',fontSize:11,marginTop:16}}>{this.state.error?.stack}</pre>
+      </div>
+    );
+    return this.props.children;
+  }
+}
+
+// Constants ????????????????????????????????????????????????????????????????
+const WEEKS = ["Pre 9th Feb","w/c 9th Feb","w/c 16th Feb","w/c 23rd Feb","w/c 2nd Mar","w/c 9th Mar","w/c 16th Mar","w/c 23rd Mar","w/c 30th Mar","w/c 6th Apr","w/c 13th Apr","w/c 20th Apr","w/c 27th Apr"];
+const DEFAULT_NAMES = ["Jimmy (JU)","Will (WH)","Patricio (PS)","Florencia (FF)","Dan G (DG)","Travis (TU)","Nam (NC)","Amalia (AC)","Elvia (EL)","Jenna (JJ)","Simmy (SD)","Jert (JS)"];
+const WIN_TYPES = ["CS <20s","CS 20-40s","Editor <20s","Editor 20-40s","Static"];
+const WIN_PTS = {"CS <20s":3,"CS 20-40s":6,"Editor <20s":2,"Editor 20-40s":3,"Static":1.5};
+const STORAGE_KEY = "creative-tracker-data-v6";
+const EDITORS = ["JU","WH","PS","FF","DG","CM","JT","IB","HC"];
+const CS_NAMES = ["Travis (TU)","Nam (NC)","Amalia (AC)","Elvia (EL)","Jenna (JJ)","Simmy (SD)","Jert (JS)"];
+const DEFAULT_WIN_CRITERIA = { maxCPA: 75, minSpend: 1000 };
+const INITIALS_MAP = {
+  "JU":"Jimmy (JU)","WH":"Will (WH)","PS":"Patricio (PS)","FF":"Florencia (FF)",
+  "DG":"Dan G (DG)","TU":"Travis (TU)","NC":"Nam (NC)","AC":"Amalia (AC)",
+  "EL":"Elvia (EL)","JJ":"Jenna (JJ)",
+  "SD":"Simmy (SD)","JS":"Jert (JS)","LW":"LW","HC":"HC","CM":"CM","JT":"JT","IB":"IB"
+};
+const MONTH_LABELS = {jan:"Jan",feb:"Feb",mar:"Mar",apr:"Apr",may:"May",jun:"Jun",jul:"Jul",aug:"Aug",sep:"Sep",oct:"Oct",nov:"Nov",dec:"Dec"};
+
+const NOTION_USER_MAP = {
+  "2cad872b-594c-819f-9076-000269d84b97":"DG",
+  "96a2f0aa-0dd3-4fe8-a299-34a1d0b26e16":"JU",
+  "203d872b-594c-810d-a20b-0002fb771ea7":"WH",
+  "196d872b-594c-8128-ae99-000275c9f251":"PS",
+  "283d872b-594c-812a-8556-0002e5d93251":"FF",
+  "2a6d872b-594c-812b-9e5a-0002430c9487":"TU",
+  "2f4d872b-594c-813f-b258-000289bc5998":"NC",
+  "219d872b-594c-81a5-b267-00021efd2414":"AC",
+};
+
+// Date helpers ?????????????????????????????????????????????????????????????
+const MONTH_NAME_TO_NUM = {
+  Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,
+  Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12
+};
+
+const VALID_YEARS = new Set(["23","24","25","26"]);
+
+const monthYearFromToken = (token) => {
+  if (!token) return null;
+  const s = token.toLowerCase().replace("sept","sep");
+  const letters = s.replace(/\d/g,"");
+  const digits = s.replace(/\D/g,"");
+  const m = MONTH_LABELS[letters];
+  if (!m) return null;
+  if (digits.length >= 2) {
+    const yr = digits.slice(0,2);
+    if (VALID_YEARS.has(yr)) return `${m} ${yr}`;
+    return null;
+  }
+  return `${m} ??`;
+};
+
+const compareMonthYear = (a, b) => {
+  const toNum = (s) => {
+    if (!s) return 999999;
+    const parts = s.split(" ");
+    const mon = parts[0];
+    const yr = parts[1];
+    if (!yr || yr === "??") return 99999;
+    const mNum = MONTH_NAME_TO_NUM[mon] || 0;
+    const yNum = parseInt(yr, 10);
+    if (isNaN(yNum)) return 99999;
+    return yNum * 100 + mNum;
+  };
+  return toNum(a) - toNum(b);
+};
+
+const normaliseAsset = (raw) => {
+  if (!raw) return null;
+  const s = raw.toLowerCase().replace(/[\s\-_]/g,"");
+  if (s.includes("static")||s==="gif"||s==="carousel") return "static";
+  if (s==="20s"||s.includes("<20")||s.includes("sub20")||s==="video20s") return "<20s";
+  if (s==="2040s"||s.includes("2040")||s==="video2040s") return "20-40s";
+  if (s==="40s"||s==="+40s"||s.includes("+40")||s==="video40s") return "+40s";
+  return null;
+};
+
+const MONTH_RE    = /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\d{2}$/i;
+const OLD_DATE_RE = /^(sept?|oct|nov|dec|jan|feb|mar|apr|may|jun|jul|aug)\d{2}$/i;
+const OLD_SOLO_RE = /^(sept?|oct|nov|dec|jan|feb|mar|apr|may|jun|jul|aug)$/i;
+const VERSION_RE  = /^V\d+\*?$/i;
+
+const parseAdName = (name) => {
+  if (!name||!name.trim()) return null;
+  const cleaned = name.replace(/[^\x00-\x7F]/g,"").trim()
+    .replace(/[\s\-]*copy[\s\d]*/gi,"")
+    .replace(/,/g,"")
+    .replace(/\s*_\s*/g,"_")
+    .replace(/\s+(V\d+)/gi,"_$1")
+    .replace(/\s+/g,"");
+  const parts = cleaned.split("_").map(s=>s.trim());
+  if (parts.length<3) return null;
+  const p = {_raw:name,convention:null};
+  const vIdx    = parts.findIndex(x=>VERSION_RE.test(x));
+  const newMIdx = parts.findIndex(x=>MONTH_RE.test(x));
+  const oldDIdx = newMIdx<0?parts.findIndex(x=>OLD_DATE_RE.test(x)||OLD_SOLO_RE.test(x)):-1;
+  const exEd = r=>{const u=(r||"").toUpperCase().replace(/\*/g,"").trim();return INITIALS_MAP[u]?{editor:u,editorName:INITIALS_MAP[u]}:{};};
+  const exCS = r=>{const u=(r||"").toUpperCase().replace(/\*/g,"").trim();return INITIALS_MAP[u]?{cs:u,csName:INITIALS_MAP[u]}:{};};
+  const pickCS = (idx) => { const a=exCS(parts[idx+1]); const b=exCS(parts[idx-1]); return Object.keys(a).length?a:b; };
+  if (newMIdx>=0) {
+    p.convention="new";
+    [p.concept,p.ticket,p.briefType,p.actor,p.persona,p.funnel,p.solutions,p.medium,p.offer]=parts;
+    p.monthToken=parts[newMIdx];
+    const newSlot1=parts[newMIdx+1]||"";
+    const newSlot2=parts[newMIdx+2]||"";
+    const newSlotLower=newSlot1.toLowerCase();
+    if(newSlotLower==="video"||newSlotLower==="image"||newSlotLower==="graphic"){
+      p.assetType=normaliseAsset(newSlot2)||normaliseAsset(newSlot1)||newSlot1||null;
+      if(p.assetType!=="static") Object.assign(p,exEd(parts[newMIdx+3]));
+    } else {
+      p.assetType=normaliseAsset(newSlot1)||newSlot1||null;
+      if(p.assetType!=="static") Object.assign(p,exEd(parts[newMIdx+2]));
+    }
+    if(vIdx>=0){p.version=parts[vIdx].toUpperCase();Object.assign(p,pickCS(vIdx));}
+  } else if (oldDIdx>=0) {
+    p.convention="old";p.concept=parts[0];p.ticket=parts[1];p.product=parts[2];
+    p.persona=parts[3];p.funnel=parts[4];p.solutions=parts[5];p.medium=parts[6];
+    p.monthToken=parts[oldDIdx];
+    const oldSlot1=parts[oldDIdx+1]||"";
+    const oldSlot2=parts[oldDIdx+2]||"";
+    const oldSlotLower=oldSlot1.toLowerCase();
+    if(oldSlotLower==="video"||oldSlotLower==="image"||oldSlotLower==="graphic"){
+      p.assetType=normaliseAsset(oldSlot2)||normaliseAsset(oldSlot1)||oldSlot1||null;
+      if(p.assetType!=="static") Object.assign(p,exEd(parts[oldDIdx+3]));
+    } else {
+      p.assetType=normaliseAsset(oldSlot1)||oldSlot1||null;
+      if(p.assetType!=="static") Object.assign(p,exEd(parts[oldDIdx+2]));
+    }
+    if(vIdx>=0){p.version=parts[vIdx].toUpperCase();Object.assign(p,pickCS(vIdx));}
+  } else {
+    p.convention="unknown";p.concept=parts[0];p.ticket=parts[1];
+    if(vIdx>=0){p.version=parts[vIdx].toUpperCase();Object.assign(p,exCS(parts[vIdx+1]));}
+    for(let i=0;i<parts.length;i++){const u=parts[i].toUpperCase();if(EDITORS.includes(u)&&INITIALS_MAP[u]&&!p.editor){p.editor=u;p.editorName=INITIALS_MAP[u];}}
+  }
+  const asset=p.assetType,ed=p.editor;
+  const isSelfEdit=p.cs&&p.editor&&p.cs===p.editor;
+  if(isSelfEdit) p.csSelfEdit=true;
+  const isEditorWin=(ed&&EDITORS.includes(ed))||isSelfEdit;
+  if(asset==="static") p.inferredWinType="Static";
+  else if(asset==="<20s") p.inferredWinType=isEditorWin?"Editor <20s":"CS <20s";
+  else if(asset==="20-40s"||asset==="+40s") p.inferredWinType=isEditorWin?"Editor 20-40s":"CS 20-40s";
+  p.monthYear=monthYearFromToken(p.monthToken);
+  return p;
+};
+
+const conceptKey = (parsed) => {
+  if(!parsed) return null;
+  if(parsed.ticket&&/^\d+$/.test(parsed.ticket.trim())) return "t:"+parsed.ticket.trim();
+  if(parsed.concept&&parsed.concept.trim()) return "c:"+parsed.concept.trim().toLowerCase();
+  return null;
+};
+
+const getWinAttributions = (parsed,winType,teamNames) => {
+  if(!parsed||parsed.convention==="unknown") return [];
+  const find=init=>init?(teamNames.find(n=>n.includes("("+init+")"))||INITIALS_MAP[init]||null):null;
+  const edM=find(parsed.editor),csM=find(parsed.cs);
+  if(winType==="Static") return [{member:csM||edM||teamNames[0],winType:"Static",pts:WIN_PTS["Static"]}];
+  if(winType==="Editor <20s"||winType==="Editor 20-40s"){
+    const csWT=winType==="Editor <20s"?"CS <20s":"CS 20-40s";
+    const res=[];
+    if(edM) res.push({member:edM,winType,pts:WIN_PTS[winType]});
+    if(csM){if(parsed.csSelfEdit||csM===edM){if(res.length)res[0].pts+=WIN_PTS[csWT];else res.push({member:csM,winType:csWT,pts:WIN_PTS[csWT]});}else res.push({member:csM,winType:csWT,pts:WIN_PTS[csWT]});}
+    return res;
+  }
+  if(winType==="CS <20s"||winType==="CS 20-40s") return [{member:csM||edM||teamNames[0],winType,pts:WIN_PTS[winType]}];
+  return [];
+};
+
+const emptyInput = ()=>({s_sub20:0,s_2040:0,s_40p:0,v_sub20:0,v_2040:0,v_40p:0,static_count:0,late:false,dialin:false,sick:false,leave:false,shoot_days:0});
+const EMPTY_INPUT_DEFAULTS={s_sub20:0,s_2040:0,s_40p:0,v_sub20:0,v_2040:0,v_40p:0,static_count:0,late:false,dialin:false,sick:false,leave:false,shoot_days:0};
+// Strip default values to shrink storage footprint
+const compressEntry=e=>{const out={};for(const k of Object.keys(EMPTY_INPUT_DEFAULTS)){if(e[k]!==undefined&&e[k]!==EMPTY_INPUT_DEFAULTS[k])out[k]=e[k];}return out;};
+const decompressEntry=e=>({...EMPTY_INPUT_DEFAULTS,...e});
+const compressWeekData=wd=>wd.map(week=>week.map(compressEntry));
+const decompressWeekData=wd=>wd.map(week=>week.map(decompressEntry));
+
+const calcBreakdown = (d,winPts) => {
+  if(d.sick||d.leave) return {scripting:0,editing:0,staticPts:0,winning:0,modifiers:0,shootBonus:0,total:0};
+  const scripting=Math.round((0.25*d.s_sub20+0.5*d.s_2040+d.s_40p)*100)/100;
+  const editing=Math.round((0.5*d.v_sub20+d.v_2040+1.5*d.v_40p)*100)/100;
+  const staticPts=Math.round(0.25*d.static_count*100)/100;
+  const winning=Math.round((winPts||0)*100)/100;
+  const modifiers=(d.late?-2:0)+(d.dialin?-1:0);
+  const base=scripting+editing+staticPts+winning+modifiers;
+  const shoots=Math.min(d.shoot_days,4);
+  const shootBonus=shoots>0?Math.round(base/(5-shoots)*shoots*100)/100:0;
+  return{scripting,editing,staticPts,winning,modifiers,shootBonus,total:Math.round((base+shootBonus)*100)/100};
+};
+
+const parsePerfRow = line => {
+  const sep=line.includes("\t")?"\t":",";
+  const p=line.split(sep).map(s=>s.trim().replace(/^"|"$/g,""));
+  if(p.length<2||!p[0]) return null;
+  return{adName:p[0],spend:parseFloat(p[1]?.replace(/[£$,]/g,""))||0,purchases:parseFloat(p[2])||0,cpa:parseFloat(p[3]?.replace(/[£$,]/g,""))||0};
+};
+
+const calcPersonHitRate = (launchedAds,winAds,personName) => {
+  const mine=launchedAds.filter(a=>a._parsed&&(a._parsed.editorName===personName||a._parsed.csName===personName));
+  const byMonth={};
+  mine.forEach(a=>{
+    const month=a._parsed.monthYear||"Unknown";
+    const ck=conceptKey(a._parsed)||"n:"+a.adName.trim().toLowerCase();
+    if(!byMonth[month])byMonth[month]={launched:new Set(),won:new Set()};
+    byMonth[month].launched.add(ck);
+  });
+  Object.keys(byMonth).forEach(month=>{
+    byMonth[month].launched.forEach(ck=>{
+      const won=winAds.filter(w=>!w.blocked).some(w=>{
+        const wCk=conceptKey(w._parsed)||"n:"+w.adName.trim().toLowerCase();
+        return wCk===ck&&(w._parsed?.monthYear||"Unknown")===month;
+      });
+      if(won) byMonth[month].won.add(ck);
+    });
+  });
+  const months=Object.keys(byMonth)
+    .filter(m=>m!=="Unknown"&&m!==null&&!m.includes("??")&&compareMonthYear(m,"Jan 26")>=0)
+    .sort(compareMonthYear);
+  const rows=months.map(m=>({month:m,launched:byMonth[m].launched.size,won:byMonth[m].won.size,rate:byMonth[m].launched.size>0?byMonth[m].won.size/byMonth[m].launched.size:0}));
+  const tL=rows.reduce((s,r)=>s+r.launched,0),tW=rows.reduce((s,r)=>s+r.won,0);
+  return{rows,totalLaunched:tL,totalWon:tW,rate:tL>0?tW/tL:0};
+};
+
+const calcTeamHitRate = (launchedAds,winAds) => {
+  const byMonth={};
+  launchedAds.forEach(a=>{
+    const month=a._parsed?.monthYear||"Unknown";
+    const ck=conceptKey(a._parsed)||"n:"+a.adName.trim().toLowerCase();
+    if(!byMonth[month])byMonth[month]={launched:new Set(),won:new Set()};
+    byMonth[month].launched.add(ck);
+  });
+  Object.keys(byMonth).forEach(month=>{
+    byMonth[month].launched.forEach(ck=>{
+      const won=winAds.filter(w=>!w.blocked).some(w=>{
+        const wCk=conceptKey(w._parsed)||"n:"+w.adName.trim().toLowerCase();
+        return wCk===ck&&(w._parsed?.monthYear||"Unknown")===month;
+      });
+      if(won) byMonth[month].won.add(ck);
+    });
+  });
+  return Object.keys(byMonth)
+    .filter(m=>m!=="Unknown"&&m!==null&&!m.includes("??")&&compareMonthYear(m,"Jan 26")>=0)
+    .sort(compareMonthYear)
+    .map(m=>({month:m,launched:byMonth[m].launched.size,won:byMonth[m].won.size,rate:byMonth[m].launched.size>0?byMonth[m].won.size/byMonth[m].launched.size:0}));
+};
+
+const buildRanking=(ads,keyFn,weighted)=>{
+  const map={};
+  ads.filter(a=>!a.blocked&&a._parsed).forEach(a=>{
+    const key=keyFn(a._parsed);
+    if(!key||["null","undefined","x","X","","None","none"].includes(String(key)))return;
+    if(!map[key])map[key]={count:0,pts:0};
+    map[key].count++;map[key].pts+=WIN_PTS[a.winType]||0;
+  });
+  return Object.entries(map).map(([k,v])=>({label:k,...v})).sort((a,b)=>weighted?b.pts-a.pts:b.count-a.count);
+};
+
+const rc=r=>r>=0.4?"text-green-600":r>=0.2?"text-amber-500":"text-red-500";
+const rb=r=>r>=0.4?"bg-green-500":r>=0.2?"bg-amber-400":"bg-red-400";
+
+const SEED_WEEKS=(()=>{
+  const d=Array.from({length:13},()=>Array.from({length:12},emptyInput));
+  d[1][0]={...emptyInput(),v_sub20:2,v_2040:5};d[1][1]={...emptyInput(),v_2040:8};d[1][2]={...emptyInput(),v_2040:7};
+  d[1][3]={...emptyInput(),v_sub20:2,v_2040:8};d[1][5]={...emptyInput(),static_count:10};d[1][6]={...emptyInput(),static_count:2};
+  d[2][0]={...emptyInput(),v_2040:9};d[2][1]={...emptyInput(),v_2040:9};d[2][2]={...emptyInput(),v_2040:7};
+  d[2][3]={...emptyInput(),v_2040:10};d[2][5]={...emptyInput(),static_count:26};d[2][6]={...emptyInput(),static_count:20};d[2][7]={...emptyInput(),static_count:2};
+  d[3][0]={...emptyInput(),v_2040:5};d[3][1]={...emptyInput(),v_sub20:1,v_2040:9};d[3][2]={...emptyInput(),v_2040:12};
+  d[3][3]={...emptyInput(),v_2040:11};d[3][4]={...emptyInput(),v_2040:12};
+  d[3][5]={...emptyInput(),s_sub20:5,s_2040:25,static_count:18};d[3][6]={...emptyInput(),s_sub20:5,s_2040:25,static_count:10};d[3][7]={...emptyInput(),static_count:26};
+  return d;
+})();
+
+const SEED_WINS=[
+  {id:1,adName:"Meals stack_3141_New_None_Broad_BOF_SaveMoney_Static_50pOff_Jan26_Static_AC_V2_AC",member:"Amalia (AC)",winType:"Static",week:"w/c 9th Feb",blocked:false,autoFlagged:false},
+  {id:2,adName:"Limited Slots_3053_New_Kai_SoloStriver_BOF_SaveMoney_UGC_50pOff_Jan26_Video-20s_JU_V3_SD",member:"Jimmy (JU)",winType:"Editor <20s",week:"w/c 9th Feb",blocked:false,autoFlagged:false},
+  {id:3,adName:"POD Stubborn_2863_New_Tom_SoloStriver_TOF_SaveMoney_UGC_50pOff_Jan26_Video-40s_JU_V1_SD",member:"Jimmy (JU)",winType:"Editor 20-40s",week:"w/c 9th Feb",blocked:false,autoFlagged:false},
+].map(a=>{const p=parseAdName(a.adName);return{...a,_parsed:p,attributions:p?getWinAttributions(p,a.winType,DEFAULT_NAMES):[]};});
+
+const NumInput=({value,onChange,disabled})=>{
+  const ref=useRef(null);
+  useEffect(()=>{if(ref.current&&document.activeElement!==ref.current)ref.current.value=value===0?"":value;},[value]);
+  return <input ref={ref} type="number" min="0" disabled={disabled} defaultValue={value===0?"":value} placeholder="0"
+    className="w-14 border rounded px-1 py-0.5 text-center text-sm disabled:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400"
+    onFocus={e=>e.target.select()}
+    onBlur={e=>onChange(e.target.value===""?0:Math.max(0,+e.target.value))}
+    onKeyDown={e=>{if(e.key==="Enter"){e.target.blur();const all=Array.from(document.querySelectorAll("input[type=number]:not(:disabled)"));const i=all.indexOf(e.target);if(i>=0&&all[i+1])all[i+1].focus();}}}/>;
+};
+
+const RankBar=({label,count,pts,max,weighted,rank})=>{
+  const val=weighted?pts:count,pct=max>0?Math.round(val/max*100):0;
+  const medal=rank===0?"🥇":rank===1?"🥈":rank===2?"🥉":null;
+  return <div className="mb-2">
+    <div className="flex justify-between items-center mb-0.5"><span className="text-sm text-gray-700">{medal&&<span className="mr-1">{medal}</span>}{label}</span><span className="text-xs text-gray-500">{weighted?`${pts}pts`:`${count}w`}</span></div>
+    <div className="h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-blue-500 rounded-full" style={{width:`${pct}%`}}/></div>
+  </div>;
+};
+
+const InsightCard=({title,data,weighted})=>{
+  if(!data||!data.length)return <div className="bg-white border rounded-xl p-4"><p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">{title}</p><p className="text-xs text-gray-400 italic">No data</p></div>;
+  const max=weighted?Math.max(...data.map(d=>d.pts)):Math.max(...data.map(d=>d.count));
+  return <div className="bg-white border rounded-xl p-4"><p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">{title}</p>{data.slice(0,6).map((d,i)=><RankBar key={d.label} {...d} max={max} weighted={weighted} rank={i}/>)}</div>;
+};
+
+function App(){
+  const [tab,setTab]=useState("input");
+  const [selWeek,setSelWeek]=useState(0);
+  const [teamNames,setTeamNames]=useState(DEFAULT_NAMES);
+  const [editName,setEditName]=useState(null);
+  const [weekData,setWeekData]=useState(SEED_WEEKS);
+  const [winAds,setWinAds]=useState(SEED_WINS);
+  const [launched,setLaunched]=useState([]);
+  const [criteria,setCriteria]=useState(DEFAULT_WIN_CRITERIA);
+  const [loading,setLoading]=useState(true);
+  const [saveStatus,setSave]=useState("saved");
+  const [saveError,setSaveError]=useState("");
+  const [showExport,setExport]=useState(false);
+  const [exportTab,setExportTab]=useState("backup");
+  const [restoreText,setRestoreText]=useState("");
+  const [restoreError,setRestoreError]=useState("");
+  const [restoreOk,setRestoreOk]=useState(false);
+  const exportRef=useRef(null);
+  const [impWeek,setImpWeek]=useState(WEEKS.filter(Boolean).slice(-1)[0]||WEEKS[0]);
+  const [impText,setImpText]=useState("");
+  const [impPreview,setImpPrev]=useState(null);
+  const [impStep,setImpStep]=useState("paste");
+  const [undoStack,setUndoStack]=useState([]);
+
+  const TEAM_SIZE = DEFAULT_NAMES.length; // 12
+
+  useEffect(()=>{
+    (async()=>{
+      try{
+                const {payload:p, launched:launchRaw}=await supabaseGet();
+        if(p){
+          if(p.teamNames)setTeamNames(p.teamNames);
+          if(p.weekData){const decompressed=decompressWeekData(p.weekData);setWeekData(decompressed.map(w=>w.length<TEAM_SIZE?[...w,...Array(TEAM_SIZE-w.length).fill(null).map(emptyInput)]:w).concat(Array(Math.max(0,13-decompressed.length)).fill(null).map(()=>Array(TEAM_SIZE).fill(null).map(emptyInput))));}
+          const rawWins=p.winAds||[];
+          if(rawWins.length)setWinAds(rawWins.map(a=>{const parsed=parseAdName(a.adName);const attrs=parsed&&parsed.convention!=="unknown"?getWinAttributions(parsed,a.winType,p.teamNames||DEFAULT_NAMES):a.attributions||[];const my=a.monthYear||parsed?.monthYear||null;return{...a,_parsed:{...parsed,monthYear:my},attributions:attrs};}));
+          if(p.criteria)setCriteria(p.criteria);
+        }
+        if(launchRaw&&Array.isArray(launchRaw)){
+          const seen=new Set();
+          const deduped=launchRaw.filter(a=>{const k=`${a.adName?.trim()}||${a.week}`;if(seen.has(k))return false;seen.add(k);return true;});
+          setLaunched(deduped.map(a=>({...a,_parsed:parseAdName(a.adName)})));
+        }
+      }catch(e){console.error("Load error",e);}
+      setLoading(false);
+    })();
+  },[]);
+
+  const saveTimerRef=useRef(null);
+  const pendingSaveRef=useRef(null);
+
+  const save=useCallback((names,data,wins,launch,crit,throttle=false)=>{
+    pendingSaveRef.current={names,data,wins,launch,crit,throttle};
+    setSave("saving");
+    if(saveTimerRef.current)clearTimeout(saveTimerRef.current);
+    saveTimerRef.current=setTimeout(async()=>{
+      const {names,data,wins,launch,crit,throttle}=pendingSaveRef.current;
+      try{
+        const winsClean=wins.map(({_parsed,_mWT,_mM,autoFlagged,attributions,...rest})=>({
+          ...rest,
+          attributions,
+          monthYear:_parsed?.monthYear||rest.monthYear||null,
+        }));
+        // Compress launched: store only numeric id index + cpa + spend, adName decoded on load
+        const launchClean=launch.map(({_parsed,_mWT,_mM,...rest})=>({
+          id:rest.id,adName:rest.adName,week:rest.week,cpa:rest.cpa,spend:rest.spend
+        }));
+        // Single write per logical group — avoid rate limiting from many sequential writes
+        const payload1=JSON.stringify({teamNames:names,weekData:compressWeekData(data),winAds:winsClean,criteria:crit});
+        const payload2=JSON.stringify(launchClean);
+        const kb1=Math.round(payload1.length/1024), kb2=Math.round(payload2.length/1024);
+        console.log(`Save — main:${kb1}KB launched:${kb2}KB | ads:${launchClean.length}`);
+        if(payload1.length>4500000) throw new Error(`Main payload too large: ${kb1}KB`);
+        if(payload2.length>4500000) throw new Error(`Launched payload too large: ${kb2}KB`);
+        const saveRes=await fetch(`${SUPABASE_URL}/rest/v1/tracker_data`,{
+          method:"POST",
+          headers:{
+            "apikey":SUPABASE_KEY,
+            "Authorization":"Bearer "+SUPABASE_KEY,
+            "Content-Type":"application/json",
+            "Prefer":"resolution=merge-duplicates"
+          },
+          body:JSON.stringify({id:"main",payload:JSON.parse(payload1),launched:JSON.parse(payload2),updated_at:new Date().toISOString()})
+        });
+        if(!saveRes.ok){const err=await saveRes.text();throw new Error(`Supabase error: ${saveRes.status} ${err}`);}
+        setSave("saved");setSaveError("");
+      }catch(e){
+        console.error("Save error",e);
+        const msg=e?.message||String(e);
+        // Append size report to any error so we can diagnose
+        let report="";
+        try{
+          const wc=wins.map(({_parsed,_mWT,_mM,autoFlagged,attributions,...rest})=>({...rest,attributions}));
+          const lc=launch.map(({_parsed,_mWT,_mM,...rest})=>({id:rest.id,adName:rest.adName,week:rest.week,cpa:rest.cpa,spend:rest.spend}));
+          const mp=JSON.stringify({teamNames:names,weekData:compressWeekData(data),winAds:wc,criteria:crit});
+          const lp=JSON.stringify(lc);
+          report=` | Sizes — main:${Math.round(mp.length/1024)}KB launched:${Math.round(lp.length/1024)}KB (${lc.length} ads)`;
+        }catch(_){}
+        setSave("error");setSaveError(msg+report);
+      }
+    },800);
+  },[]);
+
+  const pushUndo=useCallback((label,snapWeekData,snapWinAds)=>{
+    setUndoStack(s=>[{label,weekData:snapWeekData,winAds:snapWinAds,ts:Date.now()},...s].slice(0,5));
+  },[]);
+
+  const handleUndo=useCallback(()=>{
+    setUndoStack(s=>{
+      if(!s.length)return s;
+      const [top,...rest]=s;
+      setTimeout(()=>{
+        setWeekData(top.weekData);
+        setWinAds(top.winAds);
+        save(teamNames,top.weekData,top.winAds,launched,criteria);
+      },0);
+      return rest;
+    });
+  },[teamNames,launched,criteria,save]);
+
+  const getWinPts=(wi,mi)=>{
+    const name=teamNames[mi],week=WEEKS[wi];
+    return Math.round(winAds.filter(a=>a.week===week&&!a.blocked).reduce((sum,a)=>{
+      const attrs=a.attributions||[];
+      const mine=attrs.filter(at=>at.member===name).reduce((s,at)=>s+at.pts,0);
+      if(!attrs.length&&a.member===name)return sum+(WIN_PTS[a.winType]||0);
+      return sum+mine;
+    },0)*100)/100;
+  };
+
+  const getBD=(wi,mi)=>calcBreakdown(weekData[wi][mi]||emptyInput(),getWinPts(wi,mi));
+  const mTotal=(wi,mi)=>getBD(wi,mi).total;
+  const mGrand=mi=>WEEKS.reduce((s,_,wi)=>s+mTotal(wi,mi),0);
+  const wTotals=wi=>teamNames.map((_,mi)=>mTotal(wi,mi));
+  const meetsWin=(row,c)=>row.spend>=c.minSpend&&row.cpa>0&&row.cpa<=c.maxCPA;
+
+  const handleParse=()=>{
+    const lines=impText.split("\n").map(l=>l.trim()).filter(Boolean);
+    const start=isNaN(parseFloat(lines[0]?.split(/[\t,]/)[1]?.replace(/[£$,]/g,"")))?1:0;
+    const rows=lines.slice(start).map(parsePerfRow).filter(Boolean);
+    const existing=new Set(launched.map(a=>a.adName.trim()));
+    const seen=new Set(),newRows=[],dupRows=[];
+    rows.forEach(r=>{
+      const k=r.adName.trim();
+      if(existing.has(k)||seen.has(k))dupRows.push(r);else{seen.add(k);newRows.push(r);}
+    });
+    setImpPrev({newRows,dupRows});setImpStep("preview");
+  };
+
+  const handleConfirm=()=>{
+    if(!impPreview)return;
+    pushUndo("Hit rate import",weekData,winAds,launched);
+    // Deduplicate: build a set of existing adName+week combos to avoid double-importing
+    const existingKeys=new Set(launched.map(a=>`${a.adName.trim()}||${a.week}`));
+    const newL=[...launched],newW=[...winAds];let autoCount=0;
+    impPreview.newRows.forEach(row=>{
+      const parsed=parseAdName(row.adName);
+      const key=`${row.adName.trim()}||${impWeek}`;
+      if(existingKeys.has(key)){
+        // Update existing entry's cpa/spend rather than duplicating
+        const existing=newL.find(a=>a.adName.trim()===row.adName.trim()&&a.week===impWeek);
+        if(existing){existing.cpa=row.cpa;existing.spend=row.spend;}
+        return;
+      }
+      existingKeys.add(key);
+      newL.push({id:Date.now()+Math.random(),adName:row.adName,week:impWeek,spend:row.spend,purchases:row.purchases,cpa:row.cpa,_parsed:parsed});
+      if(meetsWin(row,criteria)){
+        const ck=parsed?conceptKey(parsed):null;
+        const month=parsed?.monthYear||null;
+        const alreadyWon=newW.some(w=>{
+          if(w.blocked)return false;
+          const wCk=conceptKey(w._parsed),wMonth=w._parsed?.monthYear||null;
+          if(ck&&wCk&&month&&wMonth)return ck===wCk&&month===wMonth;
+          return w.adName.trim()===row.adName.trim();
+        });
+        if(!alreadyWon){
+          const winType=parsed?.inferredWinType||"Static";
+          const attrs=parsed&&parsed.convention!=="unknown"?getWinAttributions(parsed,winType,teamNames):[];
+          newW.push({id:Date.now()+Math.random(),adName:row.adName,member:attrs[0]?.member||teamNames[0],winType,attributions:attrs,week:impWeek,blocked:false,autoFlagged:true,cpa:row.cpa,spend:row.spend,_parsed:parsed});
+          autoCount++;
+        }
+      }
+    });
+    setLaunched(newL);setWinAds(newW);
+    save(teamNames,weekData,newW,newL,criteria);
+    setImpText("");setImpPrev({...impPreview,autoCount});setImpStep("done");
+    setTimeout(()=>setImpStep("paste"),3500);
+  };
+
+  const updateField=(mi,f,v)=>setWeekData(prev=>{const next=prev.map(w=>w.map(m=>({...m})));next[selWeek][mi][f]=v;save(teamNames,next,winAds,launched,criteria);return next;});
+  const updateName=(mi,v)=>setTeamNames(prev=>{const next=prev.map((n,i)=>i===mi?v:n);save(next,weekData,winAds,launched,criteria);return next;});
+  const updateWin=(id,field,value)=>{
+    const next=winAds.map(a=>{
+      if(a.id!==id)return a;
+      const u={...a,[field]:value};
+      if(field==="adName"){const p=parseAdName(value);u._parsed=p;if(p&&!u._mWT)u.winType=p.inferredWinType||WIN_TYPES[0];const attrs=p?getWinAttributions(p,u.winType,teamNames):[];u.attributions=attrs;if(attrs.length&&!u._mM)u.member=attrs[0].member;}
+      if(field==="winType"){u._mWT=true;const attrs=u._parsed?getWinAttributions(u._parsed,value,teamNames):[];u.attributions=attrs;if(attrs.length&&!u._mM)u.member=attrs[0].member;}
+      if(field==="member")u._mM=true;
+      return u;
+    });
+    setWinAds(next);save(teamNames,weekData,next,launched,criteria);
+  };
+  const removeWin=id=>{const n=winAds.filter(a=>a.id!==id);setWinAds(n);save(teamNames,weekData,n,launched,criteria);};
+
+  if(loading)return <div className="min-h-screen bg-gray-100 flex items-center justify-center text-gray-400 text-sm">Loading...</div>;
+
+  // Sheet 1: Weekly Input
+  const InputSheet=()=>{
+    const d=weekData[selWeek];
+    const editors=teamNames.map((n,i)=>({name:n,mi:i})).filter(({name})=>!CS_NAMES.includes(name));
+    const strats=teamNames.map((n,i)=>({name:n,mi:i})).filter(({name})=>CS_NAMES.includes(name));
+    const MemberRow=({name,mi,stripe})=>{
+      const row=d[mi]||emptyInput(),pts=mTotal(selWeek,mi),wp=getWinPts(selWeek,mi);
+      const isZ=row.sick||row.leave;
+      const bg=stripe?"bg-gray-50":"bg-white";
+      return <tr className={bg}>
+        <td className={`px-3 py-2.5 font-medium sticky left-0 z-10 ${bg}`}>
+          <div className="flex items-center gap-2">
+            {editName===mi
+              ?<input autoFocus className="border rounded px-1 w-full text-sm" value={name} onChange={e=>updateName(mi,e.target.value)} onBlur={()=>setEditName(null)} onKeyDown={e=>e.key==="Enter"&&setEditName(null)}/>
+              :<span className="cursor-pointer hover:text-violet-600 transition-colors text-gray-800" onClick={()=>setEditName(mi)}>{name}</span>}
+          </div>
+        </td>
+        {["s_sub20","s_2040","s_40p"].map((f,i)=><td key={f} className={`px-1 py-1.5 ${i===0?"border-l border-gray-100":""}`}><NumInput value={row[f]} disabled={isZ} onChange={v=>updateField(mi,f,v)}/></td>)}
+        {["v_sub20","v_2040","v_40p"].map((f,i)=><td key={f} className={`px-1 py-1.5 ${i===0?"border-l border-gray-100":""}`}><NumInput value={row[f]} disabled={isZ} onChange={v=>updateField(mi,f,v)}/></td>)}
+        <td className="px-1 py-1.5 border-l border-gray-100"><NumInput value={row.static_count} disabled={isZ} onChange={v=>updateField(mi,"static_count",v)}/></td>
+        <td className="px-2 py-1.5 text-center border-l border-gray-100"><input type="checkbox" className="accent-violet-500" checked={row.late} onChange={e=>updateField(mi,"late",e.target.checked)}/></td>
+        <td className="px-2 py-1.5 text-center"><input type="checkbox" className="accent-violet-500" checked={row.dialin} onChange={e=>updateField(mi,"dialin",e.target.checked)}/></td>
+        <td className="px-2 py-1.5 text-center">
+          <select className="border border-gray-200 rounded-md text-xs px-1.5 py-0.5 bg-white" value={row.sick?"sick":row.leave?"leave":"none"} onChange={e=>setWeekData(prev=>{const next=prev.map(w=>w.map(m=>({...m})));next[selWeek][mi].sick=e.target.value==="sick";next[selWeek][mi].leave=e.target.value==="leave";save(teamNames,next,winAds,launched,criteria);return next;})}>
+            <option value="none">—</option><option value="sick">Sick</option><option value="leave">Leave</option>
+          </select>
+        </td>
+        <td className="px-1 py-1.5"><NumInput value={row.shoot_days} disabled={isZ} onChange={v=>updateField(mi,"shoot_days",Math.min(4,v))}/></td>
+        <td className="px-3 py-2.5 text-center border-l border-gray-100 font-semibold text-amber-500 text-sm">{wp>0?`+${wp}`:<span className="text-gray-200">—</span>}</td>
+        <td className="px-3 py-2.5 text-center border-l border-gray-100"><span className={`font-bold text-sm px-2 py-0.5 rounded-full ${pts>0?"bg-emerald-50 text-emerald-700":pts<0?"bg-red-50 text-red-600":"text-gray-400"}`}>{pts}</span></td>
+      </tr>;
+    };
+    const SectionDivider=({label,color})=><tr><td colSpan={14} className={`px-3 py-1.5 text-xs font-bold uppercase tracking-widest ${color}`}>{label}</td></tr>;
+    return <div>
+      <div className="flex items-center gap-3 mb-5 flex-wrap">
+        <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Week</span>
+          <select className="bg-transparent text-sm font-semibold text-gray-800 focus:outline-none cursor-pointer" value={selWeek} onChange={e=>setSelWeek(+e.target.value)}>
+            {WEEKS.map((w,i)=><option key={i} value={i}>{w}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="bg-gray-900 text-white">
+              <th className="px-3 py-2.5 text-left sticky left-0 bg-gray-900 z-10 min-w-[150px]">Member</th>
+              <th colSpan={3} className="px-3 py-2.5 text-center border-l border-gray-700 text-violet-300">✍️ Scripting</th>
+              <th colSpan={3} className="px-3 py-2.5 text-center border-l border-gray-700 text-blue-300">✂️ Editing</th>
+              <th className="px-3 py-2.5 text-center border-l border-gray-700 text-pink-300">🖼 Statics</th>
+              <th colSpan={4} className="px-3 py-2.5 text-center border-l border-gray-700 text-gray-400">Modifiers</th>
+              <th className="px-3 py-2.5 text-center border-l border-gray-700 text-amber-300">🏆 Wins</th>
+              <th className="px-3 py-2.5 text-center border-l border-gray-700 text-emerald-300">Total</th>
+            </tr>
+            <tr className="bg-gray-800 text-gray-400 text-xs">
+              <th className="px-3 py-1.5 sticky left-0 bg-gray-800 z-10"></th>
+              <th className="px-2 py-1.5 border-l border-gray-700 font-normal">&lt;20s ×0.25</th>
+              <th className="px-2 py-1.5 font-normal">20-40s ×0.5</th>
+              <th className="px-2 py-1.5 font-normal">+40s ×1</th>
+              <th className="px-2 py-1.5 border-l border-gray-700 font-normal">&lt;20s ×0.5</th>
+              <th className="px-2 py-1.5 font-normal">20-40s ×1</th>
+              <th className="px-2 py-1.5 font-normal">+40s ×1.5</th>
+              <th className="px-2 py-1.5 border-l border-gray-700 font-normal">×0.25 each</th>
+              <th className="px-2 py-1.5 border-l border-gray-700 font-normal">Late −2</th>
+              <th className="px-2 py-1.5 font-normal">Dial-in −1</th>
+              <th className="px-2 py-1.5 font-normal">Sick/Leave</th>
+              <th className="px-2 py-1.5 font-normal">Shoot Days</th>
+              <th className="px-2 py-1.5 border-l border-gray-700 font-normal text-amber-400">Auto</th>
+              <th className="px-2 py-1.5 border-l border-gray-700 font-normal text-emerald-400">Pts</th>
+            </tr>
+          </thead>
+          <tbody>
+            <SectionDivider label="✂️ Editors" color="bg-blue-50 text-blue-600 border-b border-blue-100"/>
+            {editors.map(({name,mi},i)=><MemberRow key={mi} name={name} mi={mi} stripe={i%2===1}/>)}
+            <SectionDivider label="✍️ Creative Strategists" color="bg-violet-50 text-violet-600 border-y border-violet-100"/>
+            {strats.map(({name,mi},i)=><MemberRow key={mi} name={name} mi={mi} stripe={i%2===1}/>)}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-gray-400 mt-3 italic">Win points auto-detected via performance import. Manual modifier entry only.</p>
+    </div>;
+  };
+
+  // Sheet 2: Leaderboard
+  const TrackerSheet=()=>{
+    const editors=teamNames.filter(n=>!CS_NAMES.includes(n));
+    const cs=teamNames.filter(n=>CS_NAMES.includes(n));
+    const weekMonths=WEEKS.map(w=>{const m=w.match(/[A-Za-z]+$/);return m?m[0]:null;});
+    const allMonths=[...new Set(weekMonths.filter(Boolean))];
+    const [monthFilter,setMonthFilter]=useState("All");
+    const visibleWks=monthFilter==="All"?WEEKS.map((_,i)=>i):WEEKS.map((_,i)=>i).filter(i=>weekMonths[i]===monthFilter);
+    const mTotalF=(wi,mi)=>mTotal(wi,mi);
+    const mGrandF=mi=>visibleWks.reduce((s,wi)=>s+mTotalF(wi,mi),0);
+    const wTotalsF=wi=>teamNames.map((_,mi)=>mTotalF(wi,mi));
+    const MemberRows=({names,bg,label})=>{
+      const sorted=names.map(n=>({n,mi:teamNames.indexOf(n),total:mGrandF(teamNames.indexOf(n))})).sort((a,b)=>b.total-a.total);
+      return <>
+        <tr><td colSpan={visibleWks.length+3} className={`px-3 py-2 text-xs font-bold uppercase tracking-wider ${bg}`}>{label}</td></tr>
+        {sorted.map(({n,mi},rank)=><tr key={mi} className={rank%2===0?"bg-white":"bg-gray-50"}>
+          <td className={`px-3 py-2 font-medium sticky left-0 z-10 ${rank%2===0?"bg-white":"bg-gray-50"}`}>{n}</td>
+          {visibleWks.map((wi)=>{const pts=mTotalF(wi,mi),top=pts===Math.max(...wTotalsF(wi))&&pts>0;return <td key={wi} className={`px-3 py-2 text-center text-sm ${top?"bg-yellow-50 font-bold text-yellow-700":""} ${pts<0?"text-red-500":""}`}>{pts!==0?pts:<span className="text-gray-300">—</span>}</td>;})}
+          <td className="px-3 py-2 text-center font-bold text-blue-700 bg-blue-50">{Math.round(mGrandF(mi)*100)/100}</td>
+          <td className="px-3 py-2 text-center font-bold">{rank===0?"🥇":rank===1?"🥈":rank===2?"🥉":`#${rank+1}`}</td>
+        </tr>)}
+        <tr className="bg-gray-100 text-gray-600 text-xs font-semibold">
+          <td className="px-3 py-1.5 sticky left-0 bg-gray-100 z-10 italic">{label} Total</td>
+          {visibleWks.map((wi)=><td key={wi} className="px-3 py-1.5 text-center">{Math.round(names.reduce((s,n)=>s+mTotalF(wi,teamNames.indexOf(n)),0)*100)/100}</td>)}
+          <td className="px-3 py-1.5 text-center text-blue-700 font-bold bg-blue-50">{Math.round(names.reduce((s,n)=>s+mGrandF(teamNames.indexOf(n)),0)*100)/100}</td>
+          <td></td>
+        </tr>
+      </>;
+    };
+    return <div>
+      <div className="flex items-center gap-2 mb-5 flex-wrap">
+        {["All",...allMonths].map(m=>(
+          <button key={m} onClick={()=>setMonthFilter(m)}
+            className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition-colors ${monthFilter===m?"bg-gray-800 text-white border-gray-800":"bg-white text-gray-600 border-gray-200 hover:border-gray-400"}`}>
+            {m}
+          </button>
+        ))}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead><tr className="bg-gray-800 text-white"><th className="px-3 py-2 text-left sticky left-0 bg-gray-800 z-10 min-w-[130px]">Member</th>{WEEKS.map((w,i)=><th key={i} className="px-3 py-2 text-center min-w-[88px] text-xs">{w}</th>)}<th className="px-3 py-2 text-center bg-gray-700 min-w-[70px]">Total</th><th className="px-3 py-2 text-center bg-gray-700 min-w-[55px]">Rank</th></tr></thead>
+          <tbody><MemberRows names={editors} bg="bg-blue-50 text-blue-800 border-t-2 border-blue-200" label="✂️ Editors"/><MemberRows names={cs} bg="bg-purple-50 text-purple-800 border-t-2 border-purple-200" label="🎯 Creative Strategists"/></tbody>
+          <tfoot><tr className="bg-gray-800 text-white font-semibold"><td className="px-3 py-2 sticky left-0 bg-gray-800 z-10">Team Total</td>{WEEKS.map((_,wi)=><td key={wi} className="px-3 py-2 text-center">{Math.round(wTotals(wi).reduce((a,b)=>a+b,0)*100)/100}</td>)}<td className="px-3 py-2 text-center bg-gray-700">{Math.round(teamNames.reduce((_,__,mi)=>_+mGrand(mi),0)*100)/100}</td><td></td></tr></tfoot>
+        </table>
+      </div>
+      <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+        {[{label:"✂️ Editors",names:editors,bc:"border-blue-200"},{label:"🎯 Creative Strategists",names:cs,bc:"border-purple-200"}].map(({label,names,bc})=><div key={label}>
+          <p className="text-xs font-bold uppercase tracking-wide mb-3 text-gray-500">{label}</p>
+          <div className="grid grid-cols-2 gap-3">
+            {names.map(name=>{const mi=teamNames.indexOf(name);const wks=WEEKS.map((_,wi)=>mTotal(wi,mi)).filter(p=>p>0);const avg=wks.length?Math.round(wks.reduce((a,b)=>a+b,0)/wks.length*100)/100:0;const best=wks.length?Math.max(...wks):0;const wins=winAds.filter(a=>!a.blocked&&(a.attributions||[]).some(at=>at.member===name)).length;const hr=calcPersonHitRate(launched,winAds,name);const pct=Math.round(hr.rate*100);
+              return <div key={mi} className={`bg-white rounded-lg border-2 ${bc} p-3`}>
+                <div className="font-semibold text-gray-800 text-sm mb-2">{name}</div>
+                <div className="text-xs text-gray-500 mb-0.5">Total: <span className="text-blue-600 font-bold">{Math.round(mGrand(mi)*100)/100}</span></div>
+                <div className="text-xs text-gray-500 mb-0.5">Avg: <span className="font-medium">{avg}</span> · Best: <span className="font-medium">{best}</span></div>
+                <div className="text-xs text-gray-500 mb-0.5">Win ads: <span className="font-medium text-amber-600">{wins}</span></div>
+                <div className="text-xs text-gray-500">Hit rate: <span className={`font-bold ${hr.totalLaunched>0?rc(hr.rate):"text-gray-400"}`}>{hr.totalLaunched>0?`${pct}%`:"—"}</span> <span className="text-gray-400">({hr.totalWon}/{hr.totalLaunched})</span></div>
+              </div>;})}
+          </div>
+        </div>)}
+      </div>
+    </div>;
+  };
+
+  // Sheet 3: Breakdown
+  const BreakdownSheet=()=>{
+    const [bWeek,setBWeek]=useState(0),[view,setView]=useState("week");
+    const SC=({label,count,pts,color="text-gray-700"})=><div className="bg-gray-50 rounded-lg p-3"><span className="text-xs text-gray-400 uppercase font-semibold block mb-0.5">{label}</span>{count!==null&&<span className="text-sm text-gray-600 block">{count} units</span>}<span className={`text-lg font-bold ${color}`}>{pts>0?`+${pts}`:pts===0?"—":pts}<span className="text-xs font-normal text-gray-400 ml-1">pts</span></span></div>;
+    const MC=({name,mi,wi,all})=>{
+      const [winsOpen,setWinsOpen]=useState(false);
+      const d=all?null:weekData[wi][mi],z=d&&(d.sick||d.leave);
+      const inp=all?WEEKS.reduce((acc,_,w)=>({s_sub20:acc.s_sub20+(weekData[w][mi]?.s_sub20||0),s_2040:acc.s_2040+(weekData[w][mi]?.s_2040||0),s_40p:acc.s_40p+(weekData[w][mi]?.s_40p||0),v_sub20:acc.v_sub20+(weekData[w][mi]?.v_sub20||0),v_2040:acc.v_2040+(weekData[w][mi]?.v_2040||0),v_40p:acc.v_40p+(weekData[w][mi]?.v_40p||0),static_count:acc.static_count+(weekData[w][mi]?.static_count||0)}),{s_sub20:0,s_2040:0,s_40p:0,v_sub20:0,v_2040:0,v_40p:0,static_count:0}):weekData[wi][mi]||emptyInput();
+      const b=all?(()=>{const t={scripting:0,editing:0,staticPts:0,winning:0,modifiers:0,shootBonus:0,total:0};WEEKS.forEach((_,w)=>{const br=getBD(w,mi);Object.keys(t).forEach(k=>t[k]+=br[k]);});Object.keys(t).forEach(k=>t[k]=Math.round(t[k]*100)/100);return t;})():getBD(wi,mi);
+      const myW=all?winAds.filter(a=>!a.blocked&&(a.attributions||[]).some(at=>at.member===name)):winAds.filter(a=>!a.blocked&&a.week===WEEKS[wi]&&(a.attributions||[]).some(at=>at.member===name));
+      if(z)return <div className="bg-white border rounded-xl p-4"><div className="font-bold text-gray-800 mb-2">{name}</div><div className="text-gray-400 text-sm italic">{d.sick?"Sick":"Leave"} — 0 pts</div></div>;
+      const ts=inp.s_sub20+inp.s_2040+inp.s_40p,te=inp.v_sub20+inp.v_2040+inp.v_40p;
+      return <div className="bg-white border rounded-xl p-4">
+        <div className="flex items-center justify-between mb-3"><span className="font-bold text-gray-800">{name}</span><span className={`text-xl font-bold ${b.total<0?"text-red-600":"text-green-600"}`}>{b.total} pts</span></div>
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          {ts>0&&<SC label="Scripting" count={ts} pts={b.scripting}/>}
+          {te>0&&<SC label="Editing" count={te} pts={b.editing}/>}
+          {inp.static_count>0&&<SC label="Statics" count={inp.static_count} pts={b.staticPts}/>}
+          {myW.length>0&&<SC label="Winning Ads" count={myW.length} pts={b.winning} color="text-amber-600"/>}
+          {b.modifiers!==0&&<SC label="Modifiers" count={null} pts={b.modifiers} color="text-red-500"/>}
+          {b.shootBonus>0&&<SC label="Shoot Bonus" count={null} pts={b.shootBonus} color="text-blue-500"/>}
+        </div>
+        {myW.length>0&&<div className="mt-2 border-t pt-1">
+          <button onClick={()=>setWinsOpen(o=>!o)} className="flex items-center justify-between w-full py-1.5 text-xs text-gray-500 hover:text-gray-700">
+            <span className="font-medium">{myW.length} winning ad{myW.length!==1?"s":""}</span>
+            <span className="text-gray-400">{winsOpen?"▲":"▼"}</span>
+          </button>
+          {winsOpen&&<div className="space-y-1 pt-1">{myW.map(a=>{const mine=(a.attributions||[]).filter(at=>at.member===name);return <div key={a.id} className="flex items-start justify-between text-xs py-1 border-t border-gray-50"><span className="text-gray-600 truncate mr-2 leading-4">{a.adName||"Unnamed"}</span><span className="flex gap-1 shrink-0">{mine.map((at,j)=><span key={j} className="flex items-center gap-1"><span className="bg-amber-100 text-amber-700 px-1.5 rounded">{at.winType}</span><span className="text-amber-600 font-bold">+{at.pts}</span></span>)}</span></div>;})}</div>}
+        </div>}
+        {!ts&&!te&&!inp.static_count&&!myW.length&&!b.modifiers&&<div className="text-gray-400 text-xs italic">No activity</div>}
+      </div>;
+    };
+    return <div>
+      <div className="flex items-center gap-4 mb-6 flex-wrap">
+        <div className="flex rounded-lg border overflow-hidden"><button onClick={()=>setView("week")} className={`px-4 py-2 text-sm font-medium ${view==="week"?"bg-gray-800 text-white":"bg-white text-gray-600"}`}>Weekly</button><button onClick={()=>setView("alltime")} className={`px-4 py-2 text-sm font-medium ${view==="alltime"?"bg-gray-800 text-white":"bg-white text-gray-600"}`}>All-Time</button></div>
+        {view==="week"&&<select className="border rounded px-3 py-1.5 text-sm" value={bWeek} onChange={e=>setBWeek(+e.target.value)}>{WEEKS.map((w,i)=><option key={i} value={i}>{w}</option>)}</select>}
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">{teamNames.map((name,mi)=><MC key={mi} name={name} mi={mi} wi={bWeek} all={view==="alltime"}/>)}</div>
+    </div>;
+  };
+
+  // Sheet 4: Hit Rate
+  const HitRateSheet=()=>{
+    const [editC,setEditC]=useState(false),[dCPA,setDCPA]=useState(criteria.maxCPA),[dSpend,setDSpend]=useState(criteria.minSpend);
+    const saveC=()=>{const c={maxCPA:parseFloat(dCPA)||25,minSpend:parseFloat(dSpend)||50};setCriteria(c);save(teamNames,weekData,winAds,launched,c);setEditC(false);};
+    const [editingMonthId,setEditingMonthId]=useState(null);
+    const [monthDraft,setMonthDraft]=useState("");
+    const commitMonth=(adId)=>{
+      const val=monthDraft.trim();
+      setWinAds(prev=>{
+        const next=prev.map(a=>a.id!==adId?a:{
+          ...a,
+          monthYear:val||a._parsed?.monthYear||a.monthYear||"",
+          _parsed:{...(a._parsed||{}),monthYear:val||a._parsed?.monthYear||""}
+        });
+        save(teamNames,weekData,next,launched,criteria);
+        return next;
+      });
+      setEditingMonthId(null);
+    };
+    const prevWins=impPreview?.newRows?.filter(r=>meetsWin(r,criteria))||[];
+    const [shootFilters,setShootFilters]=useState([]);
+    const [shootInput,setShootInput]=useState("");
+    const addShootFilter=()=>{const v=shootInput.trim();if(v&&!shootFilters.includes(v)){setShootFilters(f=>[...f,v]);}setShootInput("");};
+    const removeShootFilter=tag=>setShootFilters(f=>f.filter(t=>t!==tag));
+    const hasFilter=shootFilters.length>0;
+    const matchesFilter=adName=>{const n=adName.toLowerCase();return shootFilters.every(t=>n.includes(t.toLowerCase()));};
+    const filteredLaunched=hasFilter?launched.filter(a=>matchesFilter(a.adName)):launched;
+    const filteredWinAds=hasFilter?winAds.filter(a=>matchesFilter(a.adName)):winAds;
+    const teamRows=calcTeamHitRate(filteredLaunched,filteredWinAds);
+    const maxL=teamRows.length?Math.max(...teamRows.map(r=>r.launched)):0;
+    const editors=teamNames.filter(n=>!CS_NAMES.includes(n));
+    const cs=teamNames.filter(n=>CS_NAMES.includes(n));
+    const tL=teamRows.reduce((s,r)=>s+r.launched,0),tW=teamRows.reduce((s,r)=>s+r.won,0);
+
+    return <div>
+      <div className="flex items-start justify-between mb-4 flex-wrap gap-4">
+        <div>
+          <h2 className="font-bold text-gray-800">Hit Rate</h2>
+          <p className="text-xs text-gray-400 mt-0.5">Winning concepts ÷ launched concepts · Segmented by month · Concept dedup: ticket no. or name · One win per concept per month</p>
+        </div>
+        <div className="bg-white border rounded-xl px-4 py-2.5">
+          {editC?<div className="flex items-center gap-3 flex-wrap">
+            <span className="text-xs font-semibold text-gray-600">Win criteria:</span>
+            <label className="text-xs text-gray-500">CPA ≤ £<input type="number" className="border rounded px-1 w-16 text-sm ml-1" value={dCPA} onChange={e=>setDCPA(e.target.value)}/></label>
+            <label className="text-xs text-gray-500">Spend ≥ £<input type="number" className="border rounded px-1 w-16 text-sm ml-1" value={dSpend} onChange={e=>setDSpend(e.target.value)}/></label>
+            <button onClick={saveC} className="bg-gray-800 text-white text-xs px-3 py-1 rounded-lg">Save</button>
+            <button onClick={()=>setEditC(false)} className="text-gray-400 text-xs">Cancel</button>
+          </div>:<div className="flex items-center gap-3">
+            <span className="text-xs text-gray-500">Win: CPA ≤ <strong className="text-gray-700">£{criteria.maxCPA}</strong> · Spend ≥ <strong className="text-gray-700">£{criteria.minSpend}</strong></span>
+            <button onClick={()=>setEditC(true)} className="text-xs text-blue-500 hover:text-blue-700">Edit</button>
+          </div>}
+        </div>
+      </div>
+
+      <div className="bg-white border rounded-xl px-4 py-3 mb-5">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide shrink-0">🎬 Filter by actor</span>
+          <div className="flex items-center gap-1 flex-1 min-w-[200px]">
+            <input
+              type="text"
+              placeholder="Type actor name and press Enter…"
+              value={shootInput}
+              onChange={e=>setShootInput(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addShootFilter();}}}
+              className="flex-1 text-sm text-gray-800 border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-300 placeholder-gray-300"
+            />
+            <button onClick={addShootFilter} disabled={!shootInput.trim()} className="bg-violet-600 hover:bg-violet-700 disabled:bg-gray-200 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">Add</button>
+          </div>
+          {shootFilters.map(tag=>(
+            <span key={tag} className="flex items-center gap-1 bg-violet-100 text-violet-700 text-xs font-semibold px-2.5 py-1 rounded-full">
+              {tag}
+              <button onClick={()=>removeShootFilter(tag)} className="text-violet-400 hover:text-violet-700 ml-0.5">✕</button>
+            </span>
+          ))}
+          {hasFilter&&<button onClick={()=>setShootFilters([])} className="text-xs text-gray-400 hover:text-gray-600 ml-auto">Clear all</button>}
+        </div>
+        {hasFilter&&<p className="text-xs text-violet-600 mt-2">{filteredLaunched.length} launched · {filteredWinAds.filter(a=>!a.blocked).length} winners matching <strong>{shootFilters.join(" + ")}</strong></p>}
+      </div>
+
+      <div className="bg-white border-2 border-dashed border-gray-200 rounded-xl p-5 mb-8">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+          <div>
+            <p className="font-semibold text-gray-800 text-sm">📥 Weekly Performance Import</p>
+            <p className="text-xs text-gray-400 mt-0.5">Ad Name · Spend · Purchases · CPA · Tabs or commas · Header auto-detected · Exact name dedup</p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {launched.length>0&&(()=>{
+              const weeks=[...new Set(launched.map(a=>a.week))].filter(Boolean);
+              const [delWeek,setDelWeek]=useState(weeks[weeks.length-1]||WEEKS[0]);
+              const count=launched.filter(a=>a.week===delWeek).length;
+              return <div className="flex items-center gap-1.5">
+                <select className="border border-red-200 rounded px-2 py-1.5 text-xs text-red-600 bg-red-50" value={delWeek} onChange={e=>setDelWeek(e.target.value)}>
+                  {weeks.map(w=><option key={w} value={w}>{w} ({launched.filter(a=>a.week===w).length})</option>)}
+                </select>
+                <button onClick={()=>{
+                  const toRemove=new Set(launched.filter(a=>a.week===delWeek).map(a=>a.adName.trim()));
+                  const newL=launched.filter(a=>a.week!==delWeek);
+                  const newW=winAds.filter(a=>!toRemove.has(a.adName.trim()));
+                  setLaunched(newL);setWinAds(newW);
+                  save(teamNames,weekData,newW,newL,criteria);
+                }} className="text-xs bg-red-50 hover:bg-red-100 text-red-500 font-semibold px-3 py-1.5 rounded-lg border border-red-200 whitespace-nowrap">
+                  🗑 Remove {count} ads
+                </button>
+              </div>;
+            })()}
+            <span className="text-xs text-gray-500">Logging for week:</span>
+            <select className="border rounded px-3 py-1.5 text-sm" value={impWeek} onChange={e=>setImpWeek(e.target.value)}>{WEEKS.map(w=><option key={w} value={w}>{w}</option>)}</select>
+          </div>
+        </div>
+
+        {impStep==="paste"&&<div>
+          <textarea className="w-full h-32 text-xs border rounded-lg p-3 font-mono bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 mb-3 resize-none"
+            placeholder={"Ad Name\tSpend\tPurchases\tCPA\nVikki_1318_WellWomen_Conv_Health_TextOverlay_Oct25_Video-20s_PS_V9_TU\t£120.50\t8\t£15.06"}
+            value={impText} onChange={e=>setImpText(e.target.value)}/>
+          <div className="flex items-center gap-3">
+            <button onClick={handleParse} disabled={!impText.trim()} className="bg-gray-800 hover:bg-gray-700 disabled:bg-gray-300 text-white text-sm font-semibold px-5 py-2 rounded-lg">Preview →</button>
+            <span className="text-xs text-gray-400">{impText.trim()?`~${impText.split("\n").filter(l=>l.trim()).length} rows`:""}</span>
+          </div>
+        </div>}
+
+        {impStep==="preview"&&impPreview&&<div>
+          <div className="flex items-center gap-4 mb-4 p-3 bg-gray-50 rounded-lg text-sm flex-wrap">
+            <span className="font-semibold text-gray-700">Review:</span>
+            <span className="text-green-700 font-medium">✅ {impPreview.newRows.length} new</span>
+            <span className="text-gray-400">·</span>
+            <span className="text-gray-500">⏭ {impPreview.dupRows.length} already logged</span>
+            {prevWins.length>0&&<><span className="text-gray-400">·</span><span className="text-amber-700 font-semibold">🏆 {prevWins.length} auto-winners</span></>}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div className="border border-green-200 rounded-xl overflow-hidden">
+              <div className="bg-green-50 px-3 py-2 flex items-center justify-between">
+                <span className="text-xs font-bold text-green-800">✅ New ({impPreview.newRows.length})</span>
+                {prevWins.length>0&&<span className="text-xs bg-amber-100 text-amber-700 font-semibold px-2 py-0.5 rounded-full">🏆 {prevWins.length} winners</span>}
+              </div>
+              <div className="divide-y max-h-56 overflow-y-auto">
+                {impPreview.newRows.map((r,i)=>{const isW=meetsWin(r,criteria),p=parseAdName(r.adName);return <div key={i} className={`px-3 py-2 text-xs ${isW?"bg-amber-50/60":""}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-gray-700 truncate flex-1">{r.adName}</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {r.spend>0&&<span className="text-gray-400">£{r.spend.toFixed(0)}</span>}
+                      {r.cpa>0&&<span className={isW?"text-green-600 font-semibold":"text-gray-400"}>£{r.cpa.toFixed(2)}</span>}
+                      {isW&&<span className="text-amber-700 font-bold">🏆</span>}
+                    </div>
+                  </div>
+                  <div className="text-gray-400 mt-0.5 flex gap-2 flex-wrap">
+                    <span>{p?.convention==="new"?"🆕 New":p?.convention==="old"?"📂 Old":"⚠️ Unknown"}</span>
+                    {p?.monthYear&&<span>{p.monthYear}</span>}
+                    {p?.editorName&&<span className="text-blue-500">Ed: {p.editorName}</span>}
+                    {p?.csName&&<span className="text-purple-500">CS: {p.csName}</span>}
+                  </div>
+                </div>;})}
+                {!impPreview.newRows.length&&<div className="px-3 py-4 text-xs text-gray-400 italic text-center">No new ads</div>}
+              </div>
+            </div>
+            <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <div className="bg-gray-50 px-3 py-2"><span className="text-xs font-bold text-gray-500">⏭ Already logged ({impPreview.dupRows.length})</span></div>
+              <div className="divide-y max-h-56 overflow-y-auto">
+                {impPreview.dupRows.map((r,i)=><div key={i} className="px-3 py-2 text-xs text-gray-400 truncate">{r.adName}</div>)}
+                {!impPreview.dupRows.length&&<div className="px-3 py-4 text-xs text-gray-400 italic text-center">None</div>}
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={handleConfirm} disabled={!impPreview.newRows.length} className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white text-sm font-semibold px-5 py-2 rounded-lg">Confirm & Import {impPreview.newRows.length} ads</button>
+            <button onClick={()=>{setImpStep("paste");setImpPrev(null);}} className="bg-gray-200 text-gray-700 text-sm font-semibold px-5 py-2 rounded-lg">← Back</button>
+          </div>
+        </div>}
+
+        {impStep==="done"&&impPreview&&<div className="flex items-center gap-4 py-3">
+          <span className="text-3xl">✅</span>
+          <div><p className="font-semibold text-green-700">Import complete!</p><p className="text-sm text-gray-500">{impPreview.newRows?.length} ads logged{impPreview.autoCount>0&&<span className="text-amber-700 font-medium"> · {impPreview.autoCount} winner{impPreview.autoCount!==1?"s":""} added</span>}</p></div>
+          <button onClick={()=>{
+            const adNames=new Set((impPreview.newRows||[]).map(r=>r.adName.trim()));
+            const newL=launched.filter(a=>!adNames.has(a.adName.trim()));
+            const newW=winAds.filter(a=>!adNames.has(a.adName.trim()));
+            setLaunched(newL);setWinAds(newW);
+            save(teamNames,weekData,newW,newL,criteria);
+            setImpStep("paste");setImpPrev(null);
+          }} className="ml-auto text-xs bg-red-50 hover:bg-red-100 text-red-600 font-semibold px-3 py-1.5 rounded-lg border border-red-200">↩ Undo this import</button>
+        </div>}
+      </div>
+
+      {teamRows.length>0&&(()=>{
+        const HitRateChart=({label,rows,totL,totW})=>{
+          if(!rows.length)return null;
+          return <div className="bg-white border rounded-xl p-5 mb-5">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{label}</p>
+            <p className="text-xs text-gray-400 mb-4">Won / Launched concepts · <span className="text-green-600 font-semibold">■ ≥40%</span> · <span className="text-amber-500 font-semibold">■ 20–40%</span> · <span className="text-red-400 font-semibold">■ &lt;20%</span></p>
+            {rows.map(r=>{
+              const pct=Math.round(r.rate*100);
+              return <div key={r.month} className="mb-3 flex items-center gap-3 text-xs">
+                <span className="font-semibold text-gray-700 w-16 shrink-0">{r.month}</span>
+                <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+                  <div className={`h-full ${rb(r.rate)} opacity-80 rounded-full transition-all`} style={{width:`${pct}%`}}/>
+                </div>
+                <span className="text-gray-500 w-32 text-right shrink-0">{r.won}/{r.launched} <span className={`font-bold ml-1 ${rc(r.rate)}`}>{r.launched>0?`${pct}%`:"—"}</span></span>
+              </div>;
+            })}
+            <div className="border-t pt-3 mt-2 flex items-center justify-between text-sm">
+              <span className="font-semibold text-gray-700">All-time</span>
+              <span className="text-gray-600">{totW}/{totL} concepts <span className={`font-bold ml-1 ${totL>0?rc(totW/totL):"text-gray-400"}`}>{totL>0?`${Math.round(totW/totL*100)}%`:"—"}</span></span>
+            </div>
+          </div>;
+        };
+
+        const editorNames=teamNames.filter(n=>!CS_NAMES.includes(n));
+        const editorLaunched=filteredLaunched.filter(a=>a._parsed&&editorNames.includes(a._parsed.editorName));
+        const editorWins=filteredWinAds.filter(a=>!a.blocked&&(a.attributions||[]).some(at=>editorNames.includes(at.member)&&(at.winType==="Editor <20s"||at.winType==="Editor 20-40s")));
+        const editorRows=calcTeamHitRate(editorLaunched,editorWins);
+        const edL=editorRows.reduce((s,r)=>s+r.launched,0),edW=editorRows.reduce((s,r)=>s+r.won,0);
+
+        const csNames=teamNames.filter(n=>CS_NAMES.includes(n));
+        const csLaunched=filteredLaunched.filter(a=>a._parsed&&csNames.includes(a._parsed.csName));
+        const csWins=filteredWinAds.filter(a=>!a.blocked&&(a.attributions||[]).some(at=>csNames.includes(at.member)&&(at.winType==="CS <20s"||at.winType==="CS 20-40s"||at.winType==="Static")));
+        const csRows=calcTeamHitRate(csLaunched,csWins);
+        const csL=csRows.reduce((s,r)=>s+r.launched,0),csW=csRows.reduce((s,r)=>s+r.won,0);
+
+        return <>
+          <HitRateChart label="📊 Team Hit Rate by Month" rows={teamRows} totL={tL} totW={tW}/>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
+            <HitRateChart label="✂️ Editors Hit Rate by Month" rows={editorRows} totL={edL} totW={edW}/>
+            <HitRateChart label="✍️ Creative Strategists Hit Rate by Month" rows={csRows} totL={csL} totW={csW}/>
+          </div>
+        </>;
+      })()}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        {[{label:"✂️ Editors",names:editors,bc:"border-blue-200"},{label:"🎯 Creative Strategists",names:cs,bc:"border-purple-200"}].map(({label,names,bc})=><div key={label}>
+          <p className="text-xs font-bold uppercase tracking-wide mb-3 text-gray-500">{label}</p>
+          <div className="space-y-3">
+            {names.slice().sort((a,b)=>calcPersonHitRate(filteredLaunched,filteredWinAds,b).rate-calcPersonHitRate(filteredLaunched,filteredWinAds,a).rate).map(name=>{
+              const hr=calcPersonHitRate(filteredLaunched,filteredWinAds,name),pct=Math.round(hr.rate*100);
+              return <div key={name} className={`bg-white rounded-xl border-2 ${bc} p-4`}>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-bold text-gray-800">{name}</span>
+                  <div className="text-right"><div className={`text-2xl font-bold ${hr.totalLaunched>0?rc(hr.rate):"text-gray-400"}`}>{hr.totalLaunched>0?`${pct}%`:"—"}</div><div className="text-xs text-gray-400">{hr.totalWon}/{hr.totalLaunched} concepts</div></div>
+                </div>
+                {hr.rows.length>0&&<div className="space-y-1.5">{hr.rows.map(r=><div key={r.month} className="flex items-center gap-2 text-xs">
+                  <span className="text-gray-500 w-14 shrink-0">{r.month}</span>
+                  <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className={`h-full rounded-full ${rb(r.rate)}`} style={{width:`${Math.round(r.rate*100)}%`}}/></div>
+                  <span className="text-gray-500 w-20 text-right">{r.won}/{r.launched} <span className="font-semibold">{r.launched>0?`${Math.round(r.rate*100)}%`:"—"}</span></span>
+                </div>)}</div>}
+                {!hr.totalLaunched&&<div className="text-xs text-gray-400 italic mt-1">No ads attributed yet</div>}
+              </div>;
+            })}
+          </div>
+        </div>)}
+      </div>
+
+      {(()=>{
+        const allWins=filteredWinAds.filter(a=>!a.blocked);
+        const addManualWin=()=>{
+          const nw={id:Date.now()+Math.random(),adName:"",member:teamNames[0],winType:"Editor 20-40s",attributions:[],week:impWeek,blocked:false,autoFlagged:false,_parsed:null,_manual:true};
+          const next=[...winAds,nw];setWinAds(next);save(teamNames,weekData,next,launched,criteria);
+        };
+        const updateMember=(id,role,memberName)=>{
+          const next=winAds.map(a=>{
+            if(a.id!==id)return a;
+            const u={...a};
+            const wt=u.winType;
+            const isEditor=wt==="Editor <20s"||wt==="Editor 20-40s";
+            const csWT=wt==="Editor <20s"?"CS <20s":"CS 20-40s";
+            const cur=u.attributions||[];
+            if(wt==="Static"){
+              u.attributions=memberName?[{member:memberName,winType:"Static",pts:WIN_PTS["Static"]}]:[];
+            } else if(isEditor){
+              const edMember=role==="editor"?memberName:(cur.find(at=>at.winType===wt)?.member||null);
+              const csMember=role==="cs"?memberName:(cur.find(at=>at.winType===csWT)?.member||null);
+              const res=[];
+              if(edMember)res.push({member:edMember,winType:wt,pts:WIN_PTS[wt]});
+              if(csMember){
+                if(csMember===edMember&&res.length)res[0].pts+=WIN_PTS[csWT];
+                else res.push({member:csMember,winType:csWT,pts:WIN_PTS[csWT]});
+              }
+              u.attributions=res;
+            } else {
+              u.attributions=memberName?[{member:memberName,winType:wt,pts:WIN_PTS[wt]}]:[];
+            }
+            return u;
+          });
+          setWinAds(next);save(teamNames,weekData,next,launched,criteria);
+        };
+        const getMember=(ad,role)=>{
+          const wt=ad.winType;
+          const csWT=wt==="Editor <20s"?"CS <20s":"CS 20-40s";
+          const isEditor=wt==="Editor <20s"||wt==="Editor 20-40s";
+          if(role==="editor"&&isEditor) return (ad.attributions||[]).find(at=>at.winType===wt)?.member||"";
+          if(role==="cs"){
+            if(isEditor) return (ad.attributions||[]).find(at=>at.winType===csWT)?.member||"";
+            return (ad.attributions||[])[0]?.member||"";
+          }
+          return "";
+        };
+        const MemberSel=({adId,role,value,winType})=>{
+          const isEditor=winType==="Editor <20s"||winType==="Editor 20-40s";
+          const showEditor=role==="editor"&&isEditor;
+          const showCS=role==="cs";
+          if(!showEditor&&!showCS)return null;
+          const color=role==="editor"?"border-blue-200 text-blue-700":"border-violet-200 text-violet-700";
+          return(
+            <select className={`border rounded px-1.5 py-0.5 text-xs ${color} bg-white`}
+              value={value} onChange={e=>updateMember(adId,role,e.target.value||null)}>
+              <option value="">— none —</option>
+              {teamNames.map(n=><option key={n} value={n}>{n}</option>)}
+            </select>
+          );
+        };
+        return <div>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+              🏆 Winners ({allWins.length})
+              <span className="font-normal normal-case text-gray-400 ml-2">Edit win type · Assign editor &amp; CS · Points update instantly</span>
+            </p>
+            <button onClick={addManualWin} className="flex items-center gap-1.5 bg-gray-800 hover:bg-gray-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">+ Add winner</button>
+          </div>
+          <div className="overflow-x-auto rounded-xl border border-gray-200">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-gray-800 text-white text-xs">
+                  <th className="px-3 py-2 text-left min-w-[220px]">Ad Name</th>
+                  <th className="px-3 py-2 text-left">Win Type</th>
+                  <th className="px-3 py-2 text-left">✂️ Editor</th>
+                  <th className="px-3 py-2 text-left">✍️ CS</th>
+                  <th className="px-3 py-2 text-left">Points</th>
+                  <th className="px-3 py-2 text-left">Month</th>
+                  <th className="px-3 py-2 text-right">CPA</th>
+                  <th className="px-2 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {allWins.length===0&&<tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm italic">No winners yet — import performance data above or add manually</td></tr>}
+                {allWins.map((ad,i)=>{
+                  const wt=ad.winType;
+                  const isEditor=wt==="Editor <20s"||wt==="Editor 20-40s";
+                  const edVal=getMember(ad,"editor");
+                  const csVal=getMember(ad,"cs");
+                  const attrs=ad.attributions||[];
+                  return <tr key={ad.id} className={i%2===0?"bg-white":"bg-gray-50"}>
+                    <td className="px-3 py-2 text-xs max-w-xs">
+                      {ad._manual
+                        ?<input className="border rounded px-1.5 py-0.5 text-xs w-full" placeholder="Paste ad name…" value={ad.adName} onChange={e=>updateWin(ad.id,"adName",e.target.value)}/>
+                        :<span className="text-gray-700 truncate block">{ad.adName}</span>}
+                    </td>
+                    <td className="px-3 py-2">
+                      <select className="border rounded px-2 py-0.5 text-xs" value={wt} onChange={e=>updateWin(ad.id,"winType",e.target.value)}>
+                        {WIN_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-3 py-2">
+                      {isEditor
+                        ?<MemberSel adId={ad.id} role="editor" value={edVal} winType={wt}/>
+                        :<span className="text-gray-300 text-xs">—</span>}
+                    </td>
+                    <td className="px-3 py-2">
+                      <MemberSel adId={ad.id} role="cs" value={csVal} winType={wt}/>
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      {attrs.length
+                        ?<div className="flex flex-wrap gap-1.5">{attrs.map((at,j)=><span key={j} className="flex items-center gap-0.5"><span className="text-gray-600 font-medium">{at.member?.split(" ")[0]}</span><span className="text-amber-600 font-bold">+{at.pts}</span></span>)}</div>
+                        :<span className="text-gray-300 italic">—</span>}
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      {editingMonthId===ad.id
+                        ?<input
+                            autoFocus
+                            className="border border-violet-300 rounded px-1.5 py-0.5 text-xs w-16 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                            value={monthDraft}
+                            onChange={e=>setMonthDraft(e.target.value)}
+                            onBlur={()=>commitMonth(ad.id)}
+                            onKeyDown={e=>{if(e.key==="Enter")commitMonth(ad.id);if(e.key==="Escape")setEditingMonthId(null);}}
+                          />
+                        :<span
+                            className="text-gray-500 cursor-pointer hover:text-violet-600 hover:underline decoration-dotted"
+                            title="Click to edit month"
+                            onClick={()=>{setMonthDraft(ad._parsed?.monthYear||"");setEditingMonthId(ad.id);}}
+                          >{ad._parsed?.monthYear||<span className="italic text-gray-300">—</span>}</span>
+                      }
+                    </td>
+                    <td className="px-3 py-2 text-right text-xs text-gray-500">{ad.cpa?`£${ad.cpa.toFixed(2)}`:"—"}</td>
+                    <td className="px-2 py-2"><button onClick={()=>removeWin(ad.id)} className="text-red-300 hover:text-red-500 text-xs">✕</button></td>
+                  </tr>;
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>;
+      })()}
+    </div>;
+  };
+
+  // Sheet 5: Insights
+  const InsightsSheet=()=>{
+    const [weighted,setWeighted]=useState(false);
+    const valid=winAds.filter(a=>!a.blocked&&a._parsed);
+    if(!valid.length)return <div className="flex flex-col items-center justify-center py-20 text-center"><div className="text-5xl mb-4">📊</div><h2 className="text-lg font-bold text-gray-700 mb-2">No insights yet</h2><p className="text-sm text-gray-400">Import performance data in Sheet 4 to get started.</p></div>;
+    const actors=buildRanking(winAds,p=>p.actor,weighted),personas=buildRanking(winAds,p=>p.persona,weighted);
+    const solutions=buildRanking(winAds,p=>p.solutions,weighted),mediums=buildRanking(winAds,p=>p.medium,weighted);
+    const funnels=buildRanking(winAds,p=>p.funnel,weighted),assets=buildRanking(winAds,p=>p.assetType,weighted);
+    const pSol=buildRanking(winAds,p=>p.persona&&p.solutions?`${p.persona} + ${p.solutions}`:null,weighted);
+    const pMed=buildRanking(winAds,p=>p.persona&&p.medium?`${p.persona} + ${p.medium}`:null,weighted);
+    const aPer=buildRanking(winAds,p=>p.actor&&p.persona?`${p.actor} + ${p.persona}`:null,weighted);
+    const sMed=buildRanking(winAds,p=>p.solutions&&p.medium?`${p.solutions} + ${p.medium}`:null,weighted);
+    const statics=valid.filter(a=>a._parsed.assetType==="static");
+    const to=valid.filter(a=>["<20s","20-40s","+40s"].includes(a._parsed.assetType)&&a._parsed.medium?.toLowerCase().replace(/\s/g,"")==="textoverlay");
+    const videos=valid.filter(a=>["<20s","20-40s","+40s"].includes(a._parsed.assetType)&&a._parsed.medium?.toLowerCase().replace(/\s/g,"")!=="textoverlay");
+    const WL=({title,emoji,ads,color})=>{
+      const [editingMonth,setEditingMonth]=useState(null);
+      const [monthDraft,setMonthDraft]=useState("");
+      const commitMonth=(ad)=>{
+        const val=monthDraft.trim();
+        setWinAds(prev=>{
+          const next=prev.map(a=>a.id===ad.id?{
+            ...a,
+            monthYear:val||a._parsed?.monthYear||a.monthYear||"—",
+            _parsed:{...(a._parsed||{}),monthYear:val||a._parsed?.monthYear||"—"}
+          }:a);
+          save(teamNames,weekData,next,launched,criteria);
+          return next;
+        });
+        setEditingMonth(null);
+      };
+      return <div className="bg-white border rounded-xl overflow-hidden">
+        <div className={`px-4 py-3 ${color} flex items-center justify-between`}><span className="font-bold text-sm">{emoji} {title}</span><span className="text-xs opacity-70">{ads.length} winner{ads.length!==1?"s":""}</span></div>
+        {!ads.length
+          ?<div className="px-4 py-6 text-center text-gray-400 text-sm italic">No winners yet</div>
+          :<table className="w-full text-sm">
+            <thead><tr className="bg-gray-50 text-xs text-gray-500"><th className="px-4 py-2 text-left">Ad Name</th><th className="px-4 py-2 text-left">Points to</th><th className="px-4 py-2 text-left">Month</th></tr></thead>
+            <tbody>{ads.map((ad,i)=><tr key={ad.id} className={i%2===0?"bg-white":"bg-gray-50"}>
+              <td className="px-4 py-2 font-medium text-gray-800 max-w-xs truncate">{ad.adName||<span className="italic text-gray-400">Unnamed</span>}</td>
+              <td className="px-4 py-2 text-xs">{(ad.attributions||[]).length?<div className="flex flex-wrap gap-1">{ad.attributions.map((at,j)=><span key={j} className="text-amber-700 font-semibold">{at.member} +{at.pts}</span>)}</div>:<span className="text-gray-400">—</span>}</td>
+              <td className="px-4 py-2 text-xs">
+                {editingMonth===ad.id
+                  ?<input
+                      autoFocus
+                      className="border border-violet-300 rounded px-1.5 py-0.5 text-xs w-20 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                      value={monthDraft}
+                      onChange={e=>setMonthDraft(e.target.value)}
+                      onBlur={()=>commitMonth(ad)}
+                      onKeyDown={e=>{if(e.key==="Enter")commitMonth(ad);if(e.key==="Escape")setEditingMonth(null);}}
+                    />
+                  :<span
+                      className="text-gray-400 cursor-pointer hover:text-violet-600 hover:underline decoration-dotted"
+                      title="Click to edit month"
+                      onClick={()=>{setMonthDraft(ad._parsed?.monthYear||"");setEditingMonth(ad.id);}}
+                    >{ad._parsed?.monthYear||<span className="italic text-gray-300">—</span>}</span>
+                }
+              </td>
+            </tr>)}</tbody>
+          </table>
+        }
+      </div>;
+    };
+    return <div>
+      <div className="flex items-center justify-between mb-6">
+        <div><h2 className="font-bold text-gray-800">Winning Ads Insights</h2><p className="text-xs text-gray-400">{valid.length} winning ads</p></div>
+        <div className="flex rounded-lg border overflow-hidden"><button onClick={()=>setWeighted(false)} className={`px-4 py-2 text-sm font-medium ${!weighted?"bg-gray-800 text-white":"bg-white text-gray-600"}`}>By Count</button><button onClick={()=>setWeighted(true)} className={`px-4 py-2 text-sm font-medium ${weighted?"bg-gray-800 text-white":"bg-white text-gray-600"}`}>By Points</button></div>
+      </div>
+      <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide mb-3">Individual Elements</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8"><InsightCard title="🎭 Actor" data={actors} weighted={weighted}/><InsightCard title="👤 Persona" data={personas} weighted={weighted}/><InsightCard title="💡 Solutions" data={solutions} weighted={weighted}/><InsightCard title="🎬 Medium" data={mediums} weighted={weighted}/><InsightCard title="🔽 Funnel" data={funnels} weighted={weighted}/><InsightCard title="📐 Asset Type" data={assets} weighted={weighted}/></div>
+      <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide mb-3">Combinations</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8"><InsightCard title="👤💡 Persona + Solutions" data={pSol} weighted={weighted}/><InsightCard title="👤🎬 Persona + Medium" data={pMed} weighted={weighted}/><InsightCard title="🎭👤 Actor + Persona" data={aPer} weighted={weighted}/><InsightCard title="💡🎬 Solutions + Medium" data={sMed} weighted={weighted}/></div>
+      <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide mb-3">Winner Lists</p>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4"><WL title="Static Winners" emoji="🖼️" ads={statics} color="bg-purple-50 text-purple-900"/><WL title="Video Winners" emoji="🎬" ads={videos} color="bg-blue-50 text-blue-900"/><WL title="Text Overlay Winners" emoji="✍️" ads={to} color="bg-teal-50 text-teal-900"/></div>
+    </div>;
+  };
+
+  // Sheet: Weekly Winners
+  const WeeklyWinnersSheet=()=>{
+    const winsByWeek=WEEKS.map((w,wi)=>{
+      const winsThisWeek=winAds.filter(a=>a.week===w&&!a.blocked);
+      const isStatic=a=>a.winType==="Static"||(a._parsed?.format&&["Graphic","Image","Carousel"].includes(a._parsed.format));
+      const isShort=a=>a._parsed?.assetType==="<20s"||(a.winType?.includes("<20s"));
+      const isMid=a=>a._parsed?.assetType==="20-40s"||(a.winType?.includes("20-40s"));
+      const statics=winsThisWeek.filter(a=>isStatic(a)).length;
+      const shortVids=winsThisWeek.filter(a=>!isStatic(a)&&isShort(a)).length;
+      const midVids=winsThisWeek.filter(a=>!isStatic(a)&&isMid(a)).length;
+      const longVids=winsThisWeek.filter(a=>!isStatic(a)&&!isShort(a)&&!isMid(a)).length;
+      const total=winsThisWeek.length;
+      return {week:w,wi,shortVids,midVids,longVids,statics,total,ads:winsThisWeek};
+    });
+    const [expandedWeek,setExpandedWeek]=useState(null);
+    const maxTotal=Math.max(...winsByWeek.map(r=>r.total),1);
+    const grandTotal=winsByWeek.reduce((s,r)=>s+r.total,0);
+    const Cell=({n,color="text-gray-700"})=>n>0
+      ?<td className={`px-3 py-3 text-center font-semibold text-sm ${color}`}>{n}</td>
+      :<td className="px-3 py-3 text-center text-gray-200 text-sm">—</td>;
+    return <div>
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h2 className="font-bold text-gray-800 text-lg">Weekly Winners</h2>
+          <p className="text-xs text-gray-400 mt-0.5">{grandTotal} total winning ads across the season · Click a week to see details</p>
+        </div>
+        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2">
+          <span className="text-amber-500 text-lg">🏆</span>
+          <div><p className="text-xs text-amber-600 font-semibold uppercase tracking-wide">Season Total</p><p className="text-2xl font-bold text-amber-700 leading-none">{grandTotal}</p></div>
+        </div>
+      </div>
+      <div className="mb-6 bg-gray-50 rounded-xl border border-gray-100 p-4">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Winners per week</p>
+        <div className="flex items-end gap-1.5 h-16">
+          {winsByWeek.map(({week,wi,total})=>{
+            const h=maxTotal>0?Math.max(4,Math.round((total/maxTotal)*56)):4;
+            const isActive=expandedWeek===wi;
+            return <div key={wi} className="flex-1 flex flex-col items-center gap-1 cursor-pointer group" onClick={()=>setExpandedWeek(expandedWeek===wi?null:wi)}>
+              <span className="text-xs font-bold text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity">{total||""}</span>
+              <div className="w-full rounded-t-md transition-all" style={{height:h,background:total===0?"#e5e7eb":isActive?"#d97706":"#f59e0b"}}/>
+            </div>;
+          })}
+        </div>
+        <div className="flex gap-1.5 mt-1">
+          {WEEKS.map((w,i)=><div key={i} className="flex-1 text-center"><span className="text-[9px] text-gray-300 leading-none">{w.replace("w/c ","").replace("Pre ","")}</span></div>)}
+        </div>
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm mb-4">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="bg-gray-900 text-white">
+              <th className="px-3 py-2.5 text-left min-w-[130px]">Week</th>
+              <th colSpan={3} className="px-3 py-2.5 text-center border-l border-gray-700 text-blue-300">🎬 Videos</th>
+              <th className="px-3 py-2.5 text-center border-l border-gray-700 text-pink-300">🖼 Statics</th>
+              <th className="px-3 py-2.5 text-center border-l border-gray-700 text-amber-300">Total Wins</th>
+            </tr>
+            <tr className="bg-gray-800 text-gray-400 text-xs">
+              <th className="px-3 py-1.5 text-left font-normal">Sprint</th>
+              <th className="px-3 py-1.5 text-center border-l border-gray-700 font-normal">&lt;20s</th>
+              <th className="px-3 py-1.5 text-center font-normal">20–40s</th>
+              <th className="px-3 py-1.5 text-center font-normal">40s+</th>
+              <th className="px-3 py-1.5 text-center border-l border-gray-700 font-normal">All</th>
+              <th className="px-3 py-1.5 text-center border-l border-gray-700 font-normal text-amber-400">Ads</th>
+            </tr>
+          </thead>
+          <tbody>
+            {winsByWeek.map(({week,wi,shortVids,midVids,longVids,statics,total,ads},i)=>{
+              const isExpanded=expandedWeek===wi;
+              const rowBg=i%2===0?"bg-white":"bg-gray-50";
+              return <>
+                <tr key={wi} className={`${rowBg} cursor-pointer hover:bg-amber-50 transition-colors`} onClick={()=>setExpandedWeek(isExpanded?null:wi)}>
+                  <td className="px-3 py-3 font-medium text-gray-800">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs transition-transform ${isExpanded?"rotate-90":""}`}>▶</span>
+                      {week}
+                    </div>
+                  </td>
+                  <Cell n={shortVids} color="text-blue-500"/>
+                  <Cell n={midVids} color="text-blue-600"/>
+                  <Cell n={longVids} color="text-blue-700"/>
+                  <Cell n={statics} color="text-pink-600"/>
+                  <td className={`px-3 py-3 text-center font-bold text-sm border-l border-gray-100 ${total>0?"text-amber-600 bg-amber-50":""}`}>{total||<span className="text-gray-200">—</span>}</td>
+                </tr>
+                {isExpanded&&<tr key={`exp-${wi}`} className="bg-amber-50/50">
+                  <td colSpan={6} className="px-4 py-3">
+                    {ads.length===0
+                      ?<p className="text-sm text-gray-400 italic">No winners logged for this week yet.</p>
+                      :<div className="space-y-1.5">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Winning ads — {week}</p>
+                        {ads.map((ad,j)=>{
+                          const isStaticAd=ad.winType==="Static"||(ad._parsed?.format&&["Graphic","Image","Carousel"].includes(ad._parsed?.format));
+                          return <div key={ad.id} className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-amber-100">
+                            <span className="text-sm">{isStaticAd?"🖼️":"🎬"}</span>
+                            <span className="text-sm font-medium text-gray-800 truncate flex-1">{ad.adName||<span className="italic text-gray-400">Unnamed</span>}</span>
+                            <span className="text-xs text-gray-400 shrink-0">{ad._parsed?.assetType||ad.winType}</span>
+                            {(ad.attributions||[]).map((at,k)=><span key={k} className="text-xs bg-amber-100 text-amber-700 font-semibold px-2 py-0.5 rounded-full shrink-0">{at.member} +{at.pts}</span>)}
+                          </div>;
+                        })}
+                      </div>
+                    }
+                  </td>
+                </tr>}
+              </>;
+            })}
+            <tr className="bg-gray-100 font-bold border-t-2 border-gray-300">
+              <td className="px-3 py-3 text-gray-700">Season Total</td>
+              {[
+                winsByWeek.reduce((s,r)=>s+r.shortVids,0),
+                winsByWeek.reduce((s,r)=>s+r.midVids,0),
+                winsByWeek.reduce((s,r)=>s+r.longVids,0),
+                winsByWeek.reduce((s,r)=>s+r.statics,0),
+              ].map((n,i)=><td key={i} className={`px-3 py-3 text-center text-sm ${i===0?"border-l border-gray-200":""} ${n>0?"text-gray-800":"text-gray-300"}`}>{n||"—"}</td>)}
+              <td className="px-3 py-3 text-center text-amber-700 text-lg border-l border-gray-200">{grandTotal}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-gray-400 italic">Winners are auto-detected via Performance Import or manually logged in Settings. Blocked ads are excluded.</p>
+    </div>;
+  };
+
+  // Sheet: Weekly Output — FIXED to include CS statics
+  const WeeklyOutputSheet=()=>{
+    const editors=teamNames.map((n,mi)=>({name:n,mi})).filter(({name})=>!CS_NAMES.includes(name));
+    const strats=teamNames.map((n,mi)=>({name:n,mi})).filter(({name})=>CS_NAMES.includes(name));
+    const allMembers=[...editors,...strats];
+
+    const weekSummaries=WEEKS.map((w,wi)=>{
+      let totalVideos=0,totalStatics=0,totalScripts=0;
+      // Editors: videos + statics
+      editors.forEach(({mi})=>{
+        const row=weekData[wi][mi]||emptyInput();
+        if(row.sick||row.leave)return;
+        totalVideos+=(row.v_sub20||0)+(row.v_2040||0)+(row.v_40p||0);
+        totalStatics+=(row.static_count||0);
+      });
+      // CS: scripts + statics (fix: was missing statics from CS)
+      strats.forEach(({mi})=>{
+        const row=weekData[wi][mi]||emptyInput();
+        if(row.sick||row.leave)return;
+        totalScripts+=(row.s_sub20||0)+(row.s_2040||0)+(row.s_40p||0);
+        totalStatics+=(row.static_count||0); // ← the fix
+      });
+      return {week:w,wi,totalVideos,totalStatics,totalScripts,total:totalVideos+totalStatics+totalScripts};
+    });
+
+    const [showPerPerson,setShowPerPerson]=useState(null);
+    const maxVid=Math.max(...weekSummaries.map(r=>r.totalVideos),1);
+    const maxStat=Math.max(...weekSummaries.map(r=>r.totalStatics),1);
+    const maxScript=Math.max(...weekSummaries.map(r=>r.totalScripts),1);
+    const seasonVids=weekSummaries.reduce((s,r)=>s+r.totalVideos,0);
+    const seasonStats=weekSummaries.reduce((s,r)=>s+r.totalStatics,0);
+    const seasonScripts=weekSummaries.reduce((s,r)=>s+r.totalScripts,0);
+
+    return <div>
+      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+        <div>
+          <h2 className="font-bold text-gray-800 text-lg">Weekly Output</h2>
+          <p className="text-xs text-gray-400 mt-0.5">Whole team · Sick/leave weeks excluded · Click a week to see per-person detail</p>
+        </div>
+        <div className="flex gap-3 flex-wrap">
+          <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2">
+            <span className="text-lg">🎬</span>
+            <div><p className="text-xs text-blue-600 font-semibold uppercase tracking-wide">Season Videos</p><p className="text-2xl font-bold text-blue-700 leading-none">{seasonVids}</p></div>
+          </div>
+          <div className="flex items-center gap-2 bg-pink-50 border border-pink-200 rounded-xl px-4 py-2">
+            <span className="text-lg">🖼️</span>
+            <div><p className="text-xs text-pink-600 font-semibold uppercase tracking-wide">Season Statics</p><p className="text-2xl font-bold text-pink-700 leading-none">{seasonStats}</p></div>
+          </div>
+          <div className="flex items-center gap-2 bg-violet-50 border border-violet-200 rounded-xl px-4 py-2">
+            <span className="text-lg">✍️</span>
+            <div><p className="text-xs text-violet-600 font-semibold uppercase tracking-wide">Season Scripts</p><p className="text-2xl font-bold text-violet-700 leading-none">{seasonScripts}</p></div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-6 bg-gray-50 rounded-xl border border-gray-100 p-4">
+        <div className="flex gap-4 mb-3">
+          <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-blue-400"/><span className="text-xs text-gray-500">Videos (edited)</span></div>
+          <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-pink-400"/><span className="text-xs text-gray-500">Statics (all team)</span></div>
+          <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-violet-400"/><span className="text-xs text-gray-500">Scripts (CS)</span></div>
+        </div>
+        <div className="flex items-end gap-2 h-24">
+          {weekSummaries.map(({wi,totalVideos,totalStatics,totalScripts})=>{
+            const vH=maxVid>0?Math.max(totalVideos>0?4:0,Math.round((totalVideos/maxVid)*80)):0;
+            const sH=maxStat>0?Math.max(totalStatics>0?4:0,Math.round((totalStatics/maxStat)*80)):0;
+            const scH=maxScript>0?Math.max(totalScripts>0?4:0,Math.round((totalScripts/maxScript)*80)):0;
+            return <div key={wi} className="flex-1 flex items-end gap-px cursor-pointer group" onClick={()=>setShowPerPerson(showPerPerson===wi?null:wi)}>
+              <div className="flex-1 rounded-t-sm bg-blue-400 hover:bg-blue-500 transition-colors" style={{height:vH}} title={`${totalVideos} videos`}/>
+              <div className="flex-1 rounded-t-sm bg-pink-400 hover:bg-pink-500 transition-colors" style={{height:sH}} title={`${totalStatics} statics`}/>
+              <div className="flex-1 rounded-t-sm bg-violet-400 hover:bg-violet-500 transition-colors" style={{height:scH}} title={`${totalScripts} scripts`}/>
+            </div>;
+          })}
+        </div>
+        <div className="flex gap-2 mt-1">
+          {WEEKS.map((w,i)=><div key={i} className="flex-1 text-center"><span className="text-[9px] text-gray-300">{w.replace("w/c ","").replace("Pre ","")}</span></div>)}
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm mb-4">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="bg-gray-900 text-white">
+              <th className="px-3 py-2.5 text-left min-w-[130px]">Week</th>
+              <th className="px-3 py-2.5 text-center border-l border-gray-700 text-blue-300">🎬 Videos</th>
+              <th className="px-3 py-2.5 text-center border-l border-gray-700 text-pink-300">🖼 Statics</th>
+              <th className="px-3 py-2.5 text-center border-l border-gray-700 text-violet-300">✍️ Scripts</th>
+              <th className="px-3 py-2.5 text-center border-l border-gray-700 text-emerald-300">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {weekSummaries.map(({week,wi,totalVideos,totalStatics,totalScripts,total},i)=>{
+              const rowBg=i%2===0?"bg-white":"bg-gray-50";
+              const isExpanded=showPerPerson===wi;
+              return <>
+                <tr key={wi} className={`${rowBg} cursor-pointer hover:bg-blue-50/40 transition-colors`} onClick={()=>setShowPerPerson(isExpanded?null:wi)}>
+                  <td className="px-3 py-3 font-medium text-gray-800">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs transition-transform ${isExpanded?"rotate-90":""}`}>▶</span>
+                      {week}
+                    </div>
+                  </td>
+                  <td className={`px-3 py-3 text-center font-semibold border-l border-gray-100 ${totalVideos>0?"text-blue-600":"text-gray-200"}`}>{totalVideos||"—"}</td>
+                  <td className={`px-3 py-3 text-center font-semibold border-l border-gray-100 ${totalStatics>0?"text-pink-600":"text-gray-200"}`}>{totalStatics||"—"}</td>
+                  <td className={`px-3 py-3 text-center font-semibold border-l border-gray-100 ${totalScripts>0?"text-violet-600":"text-gray-200"}`}>{totalScripts||"—"}</td>
+                  <td className={`px-3 py-3 text-center font-bold border-l border-gray-100 ${total>0?"text-emerald-700 bg-emerald-50":""}`}>{total||<span className="text-gray-200">—</span>}</td>
+                </tr>
+                {isExpanded&&<tr key={`pp-${wi}`} className="bg-blue-50/30">
+                  <td colSpan={5} className="px-4 py-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs font-semibold text-blue-500 uppercase tracking-wide mb-2">✂️ Editors</p>
+                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+                          {editors.map(({name,mi})=>{
+                            const row=weekData[wi][mi]||emptyInput();
+                            const vids=(row.v_sub20||0)+(row.v_2040||0)+(row.v_40p||0);
+                            const stats=row.static_count||0;
+                            const absent=row.sick||row.leave;
+                            return <div key={mi} className={`bg-white rounded-lg px-3 py-2 border ${absent?"border-gray-100 opacity-40":"border-blue-100"}`}>
+                              <p className="text-xs font-semibold text-gray-700 mb-1 truncate">{name}</p>
+                              {absent?<p className="text-xs text-gray-400 italic">{row.sick?"Sick":"Leave"}</p>
+                                :<div className="flex gap-2 text-xs">
+                                  <span className="text-blue-600 font-bold">{vids}v</span>
+                                  <span className="text-gray-300">·</span>
+                                  <span className="text-pink-600 font-bold">{stats}s</span>
+                                </div>}
+                            </div>;
+                          })}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-violet-500 uppercase tracking-wide mb-2">✍️ Strategists</p>
+                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+                          {strats.map(({name,mi})=>{
+                            const row=weekData[wi][mi]||emptyInput();
+                            const scripts=(row.s_sub20||0)+(row.s_2040||0)+(row.s_40p||0);
+                            const stats=row.static_count||0;
+                            const absent=row.sick||row.leave;
+                            return <div key={mi} className={`bg-white rounded-lg px-3 py-2 border ${absent?"border-gray-100 opacity-40":"border-violet-100"}`}>
+                              <p className="text-xs font-semibold text-gray-700 mb-1 truncate">{name}</p>
+                              {absent?<p className="text-xs text-gray-400 italic">{row.sick?"Sick":"Leave"}</p>
+                                :<div className="flex gap-2 text-xs flex-wrap">
+                                  <span className="text-violet-600 font-bold">{scripts} script{scripts!==1?"s":""}</span>
+                                  {stats>0&&<><span className="text-gray-300">·</span><span className="text-pink-600 font-bold">{stats}s</span></>}
+                                </div>}
+                            </div>;
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                </tr>}
+              </>;
+            })}
+            <tr className="bg-gray-100 font-bold border-t-2 border-gray-300">
+              <td className="px-3 py-3 text-gray-700">Season Total</td>
+              <td className="px-3 py-3 text-center text-blue-700 border-l border-gray-200">{seasonVids}</td>
+              <td className="px-3 py-3 text-center text-pink-700 border-l border-gray-200">{seasonStats}</td>
+              <td className="px-3 py-3 text-center text-violet-700 border-l border-gray-200">{seasonScripts}</td>
+              <td className="px-3 py-3 text-center text-emerald-700 font-bold border-l border-gray-200">{seasonVids+seasonStats+seasonScripts}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-gray-400 italic">Videos = edited by editors. Statics = all team (editors + CS). Scripts = CS scripting output. Sick/leave weeks excluded.</p>
+    </div>;
+  };
+
+  return <div className="min-h-screen p-4" style={{background:"linear-gradient(135deg,#f0f4ff 0%,#faf5ff 50%,#f0fdf4 100%)"}}>
+    <div className="max-w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
+      <div className="px-6 py-5 flex items-center justify-between" style={{background:"linear-gradient(135deg,#1e1b4b 0%,#312e81 60%,#1e3a5f 100%)"}}>
+        <div>
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="text-2xl">🎬</span>
+            <h1 className="text-white text-xl font-bold tracking-tight">Creative Team Tracker</h1>
+          </div>
+          <p className="text-indigo-300 text-xs">Simmer Eats · Updated each Monday</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {undoStack.length>0
+            ?<button onClick={handleUndo} className="text-xs bg-amber-400/20 hover:bg-amber-400/30 text-amber-200 font-semibold px-3 py-1.5 rounded-full border border-amber-400/30 transition-all flex items-center gap-1.5">↩ Undo <span className="opacity-70 font-normal truncate max-w-[140px]">{undoStack[0].label}</span></button>
+            :<span className="text-xs text-white/20 font-semibold px-3 py-1.5 rounded-full border border-white/10">↩ Undo</span>}
+          {saveStatus==="error"
+            ?<div className="relative">
+               <button onClick={()=>setSave("saved")} className="text-xs px-3 py-1.5 rounded-full font-semibold border cursor-pointer" style={{background:"rgba(239,68,68,0.2)",color:"#fca5a5",borderColor:"rgba(239,68,68,0.4)"}}>⚠ Save Error — click to dismiss</button>
+               {saveError&&<div className="absolute right-0 top-8 z-50 bg-gray-900 text-red-300 text-xs rounded-xl px-4 py-3 w-80 shadow-2xl border border-red-500/30">
+                 <p className="font-bold mb-1 text-red-400">Save failed:</p>
+                 <p className="font-mono break-words">{saveError}</p>
+                 <p className="text-gray-400 mt-2">This usually means the storage limit was exceeded. Data is safe in memory but not persisted.</p>
+               </div>}
+             </div>
+            :<div className="text-xs px-3 py-1.5 rounded-full font-semibold border" style={{background:saveStatus==="saved"?"rgba(16,185,129,0.15)":"rgba(245,158,11,0.15)",color:saveStatus==="saved"?"#6ee7b7":"#fcd34d",borderColor:saveStatus==="saved"?"rgba(16,185,129,0.3)":"rgba(245,158,11,0.3)"}}>{saveStatus==="saved"?"✓ Saved":"Saving…"}</div>
+          }
+          <button onClick={()=>{
+            try{
+              const seenE=new Set();
+              const dl=launched.filter(a=>{const k=`${a.adName?.trim()}||${a.week}`;if(seenE.has(k))return false;seenE.add(k);return true;});
+              const payload=JSON.stringify({_version:1,_exported:new Date().toISOString(),teamNames,weekData,winAds:winAds.map(({_parsed,_mWT,_mM,autoFlagged,attributions,...rest})=>({...rest,attributions})),launched:dl.map(({_parsed,_mWT,_mM,...rest})=>({id:rest.id,adName:rest.adName,week:rest.week,cpa:rest.cpa,spend:rest.spend})),criteria},null,2);
+              const a=document.createElement("a");
+              a.href=URL.createObjectURL(new Blob([payload],{type:"application/json"}));
+              a.download=`simmer-tracker-backup-${new Date().toISOString().slice(0,10)}.json`;
+              a.click();
+            }catch(e){alert("Export failed: "+e.message);}
+          }} className="text-xs bg-emerald-500 hover:bg-emerald-400 text-white font-semibold px-3 py-1.5 rounded-full border border-emerald-400/50 transition-all">⬇ Export JSON</button>
+          <button onClick={()=>setExport(true)} className="text-xs bg-white/10 hover:bg-white/20 text-white font-semibold px-3 py-1.5 rounded-full border border-white/20 transition-all">💾 Backup & Restore</button>
+        </div>
+      </div>
+
+      {showExport&&<div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
+          <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
+            <div>
+              <h2 className="font-bold text-gray-800 text-lg">Backup & Restore</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Save your full tracker data or restore from a previous backup</p>
+            </div>
+            <button onClick={()=>setExport(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+          </div>
+          <div className="flex border-b border-gray-100">
+            {[["backup","💾 Backup (JSON)"],["csv","📊 Points (CSV)"],["restore","⬆ Restore"]].map(([id,label])=>
+              <button key={id} onClick={()=>setExportTab(id)} className={`px-5 py-2.5 text-sm font-semibold border-b-2 transition-all ${exportTab===id?"border-violet-600 text-violet-700":"border-transparent text-gray-500 hover:text-gray-700"}`}>{label}</button>)}
+          </div>
+          <div className="p-6">
+            {exportTab==="restore"
+              ?<div>
+                <p className="text-sm text-gray-600 mb-3">Upload a backup JSON file to restore. <span className="text-amber-600 font-semibold">This will overwrite your current data.</span></p>
+                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-violet-300 rounded-xl cursor-pointer bg-violet-50 hover:bg-violet-100 transition-colors">
+                  <span className="text-2xl mb-1">📂</span>
+                  <span className="text-sm font-semibold text-violet-700">Click to select backup JSON file</span>
+                  <span className="text-xs text-gray-400 mt-0.5">simmer-tracker-backup-*.json</span>
+                  <input type="file" accept=".json,application/json" className="hidden" onChange={e=>{
+                    const file=e.target.files?.[0];
+                    if(!file)return;
+                    const reader=new FileReader();
+                    reader.onload=ev=>setRestoreText(ev.target.result||"");
+                    reader.readAsText(file);
+                    e.target.value="";
+                  }}/>
+                </label>
+                {restoreText&&<p className="text-violet-600 text-xs mt-2 font-semibold">✓ File loaded — click Restore to apply</p>}
+                {restoreError&&<p className="text-red-500 text-xs mt-2 font-medium">⚠ {restoreError}</p>}
+                {restoreOk&&<p className="text-green-600 text-xs mt-2 font-semibold">✓ Restored successfully</p>}
+                <div className="flex gap-2 mt-3">
+                  <button onClick={()=>{
+                    setRestoreError("");setRestoreOk(false);
+                    try{
+                      const d=JSON.parse(restoreText.trim());
+                      if(!d.teamNames||!d.weekData)throw new Error("Missing teamNames or weekData — is this a valid backup?");
+                      pushUndo("Before restore",weekData,winAds);
+                      // Capture all processed data into variables first so setState and save() use identical data
+                      const restoredNames=d.teamNames||teamNames;
+                      const restoredWeekData=d.weekData
+                        ? decompressWeekData(d.weekData).map(w=>w.length<TEAM_SIZE?[...w,...Array(TEAM_SIZE-w.length).fill(null).map(emptyInput)]:w.slice(0,TEAM_SIZE))
+                            .concat(Array(Math.max(0,13-d.weekData.length)).fill(null).map(()=>Array(TEAM_SIZE).fill(null).map(emptyInput)))
+                        : weekData;
+                      const restoredWinAds=d.winAds
+                        ? d.winAds.map(a=>{const p=parseAdName(a.adName);return{...a,_parsed:p,attributions:a.attributions?.length?a.attributions:p?getWinAttributions(p,a.winType,restoredNames):[]};})
+                        : winAds;
+                      const restoredLaunchedRaw=d.launched||launched;
+                      const seenL=new Set();
+                      const restoredLaunched=restoredLaunchedRaw.filter(a=>{const k=`${a.adName?.trim()}||${a.week}`;if(seenL.has(k))return false;seenL.add(k);return true;}).map(a=>({...a,_parsed:parseAdName(a.adName)}));
+                      const restoredCriteria=d.criteria||criteria;
+                      setTeamNames(restoredNames);
+                      setWeekData(restoredWeekData);
+                      setWinAds(restoredWinAds);
+                      setLaunched(restoredLaunched);
+                      setCriteria(restoredCriteria);
+                      // Write directly to storage — bypass debounce so re-renders can't overwrite pendingSaveRef
+                      setSave("saving");
+                      (async()=>{
+                        let step="init",p1="",p2="";
+                        try{
+                          step="building winsClean";
+                          const winsClean=restoredWinAds.map(({_parsed,_mWT,_mM,autoFlagged,attributions,...rest})=>({...rest,attributions,monthYear:_parsed?.monthYear||rest.monthYear||null}));
+                          step="building launchClean";
+                          const launchClean=restoredLaunched.map(({_parsed,...rest})=>({id:rest.id,adName:rest.adName,week:rest.week,cpa:rest.cpa,spend:rest.spend}));
+                          step="stringifying main";
+                          p1=JSON.stringify({teamNames:restoredNames,weekData:compressWeekData(restoredWeekData),winAds:winsClean,criteria:restoredCriteria});
+                          step="stringifying launched";
+                          p2=JSON.stringify(launchClean);
+                          step=`writing main (${Math.round(p1.length/1024)}KB)`;
+                          console.log(`Restore — main:${Math.round(p1.length/1024)}KB launched:${Math.round(p2.length/1024)}KB (${launchClean.length} ads)`);
+                          const rRes=await fetch(`${SUPABASE_URL}/rest/v1/tracker_data`,{
+                            method:"POST",
+                            headers:{
+                              "apikey":SUPABASE_KEY,
+                              "Authorization":"Bearer "+SUPABASE_KEY,
+                              "Content-Type":"application/json",
+                              "Prefer":"resolution=merge-duplicates"
+                            },
+                            body:JSON.stringify({id:"main",payload:JSON.parse(p1),launched:JSON.parse(p2),updated_at:new Date().toISOString()})
+                          });
+                          if(!rRes.ok){const err=await rRes.text();throw new Error(`Supabase error: ${rRes.status} ${err}`);}
+                          setSave("saved");setSaveError("");
+                          setRestoreOk(true);
+                          setTimeout(()=>{setExport(false);setRestoreText("");setRestoreOk(false);},1800);
+                        }catch(e){
+                          // Storage failed but data is live in memory — show warning not hard error
+                          setSave("saved");
+                          setRestoreOk(true);
+                          setRestoreError(`Data restored in memory but storage write failed (${e.message.slice(0,60)}). Download a fresh backup now to be safe.`);
+                          setTimeout(()=>{setExport(false);setRestoreText("");setRestoreOk(false);},4000);
+                        }
+                      })();
+                    }catch(e){setRestoreError(e.message||"Invalid backup file");}
+                  }} disabled={!restoreText.trim()} className="flex-1 bg-violet-600 hover:bg-violet-700 disabled:bg-gray-200 disabled:text-gray-400 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">Restore from backup</button>
+                  <button onClick={()=>{setExport(false);setRestoreText("");setRestoreError("");}} className="px-5 bg-gray-100 text-gray-700 text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-200">Cancel</button>
+                </div>
+              </div>
+              :(()=>{
+                const seenB=new Set();
+                const dedupedLaunched=launched.filter(a=>{const k=`${a.adName?.trim()}||${a.week}`;if(seenB.has(k))return false;seenB.add(k);return true;});
+                const backupPayload=JSON.stringify({_version:1,_exported:new Date().toISOString(),teamNames,weekData,winAds:winAds.map(({_parsed,_mWT,_mM,autoFlagged,attributions,...rest})=>({...rest,attributions})),launched:dedupedLaunched.map(({_parsed,_mWT,_mM,...rest})=>({id:rest.id,adName:rest.adName,week:rest.week,cpa:rest.cpa,spend:rest.spend})),criteria},null,2);
+                const csvPayload=[["Team Member",...WEEKS,"Total"].join(","),...teamNames.map((n,mi)=>[n,...WEEKS.map((_,wi)=>mTotal(wi,mi)),Math.round(mGrand(mi)*100)/100].join(","))].join("\n");
+                const activeText=exportTab==="backup"?backupPayload:csvPayload;
+                return <div>
+                  {exportTab==="backup"&&<div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 mb-3">
+                    <span className="text-emerald-500 text-lg mt-0.5">💾</span>
+                    <div><p className="text-sm font-semibold text-emerald-800">Full backup — save this every Monday</p><p className="text-xs text-emerald-600 mt-0.5">Includes all weekly input data, win ads, launched ads, hit rate data, and team config. Paste back in to fully restore.</p></div>
+                  </div>}
+                  {exportTab==="csv"&&<div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-3">
+                    <span className="text-amber-500 text-lg mt-0.5">⚠️</span>
+                    <div><p className="text-sm font-semibold text-amber-800">Points only — cannot be used to restore data</p><p className="text-xs text-amber-600 mt-0.5">Use the JSON backup if you want to preserve all your data. This CSV is for sharing scores only.</p></div>
+                  </div>}
+                  <textarea ref={exportRef} className="w-full h-52 text-xs border border-gray-200 rounded-xl p-3 font-mono bg-gray-50 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none" readOnly value={activeText} onClick={e=>e.target.select()}/>
+                  <div className="flex gap-2 mt-3">
+                    <button onClick={()=>{exportRef.current?.select();document.execCommand("copy");}} className="flex-1 bg-violet-600 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-violet-700">Copy to Clipboard</button>
+                    <button onClick={()=>{const bl=new Blob([activeText],{type:exportTab==="backup"?"application/json":"text/csv"});const a=document.createElement("a");a.href=URL.createObjectURL(bl);a.download=exportTab==="backup"?`simmer-tracker-backup-${new Date().toISOString().slice(0,10)}.json`:"simmer-tracker-points.csv";a.click();}} className="px-5 bg-gray-800 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-700">⬇ Download file</button>
+                    <button onClick={()=>setExport(false)} className="px-5 bg-gray-100 text-gray-700 text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-200">Close</button>
+                  </div>
+                </div>;
+              })()
+            }
+          </div>
+        </div>
+      </div>}
+
+      <div className="flex border-b border-gray-100 overflow-x-auto bg-gray-50/50">
+        {[["input","📥 Input"],["winners","🏆 Winners"],["output","🎬 Output"],["tracker","📊 Leaderboard"],["breakdown","📋 Breakdown"],["hitrate","🎯 Hit Rate"],["insights","💡 Insights"]].map(([id,label])=>
+          <button key={id} onClick={()=>setTab(id)} className={`px-5 py-3.5 text-sm font-semibold border-b-2 whitespace-nowrap transition-all ${tab===id?"border-violet-600 text-violet-700 bg-white":"border-transparent text-gray-500 hover:text-gray-700 hover:bg-white/60"}`}>{label}</button>)}
+      </div>
+
+      <div className="p-5">
+        {tab==="input"     &&<InputSheet/>}
+        {tab==="winners"   &&<WeeklyWinnersSheet/>}
+        {tab==="output"    &&<WeeklyOutputSheet/>}
+        {tab==="tracker"   &&<TrackerSheet/>}
+        {tab==="breakdown" &&<BreakdownSheet/>}
+        {tab==="hitrate"   &&<HitRateSheet/>}
+        {tab==="insights"  &&<InsightsSheet/>}
+      </div>
+
+      <div className="px-5 pb-5">
+        <div className="bg-gray-50 rounded-xl p-3 text-xs text-gray-500 border border-gray-100">
+          <span className="font-semibold text-gray-600">Points: </span>Scripting ×(0.25/0.5/1) · Editing ×(0.5/1/1.5) · Static ×0.25 · Video win: editor pts→editor + CS pts→CS · CS self-edit=both · Late −2 · Dial-in −1 &nbsp;·&nbsp;
+          <span className="font-semibold text-gray-600">Hit rate: </span>Won ÷ launched concepts by month · Ticket or name dedup · One win per concept per month &nbsp;·&nbsp;
+          <span className="font-semibold text-gray-600">Auto-win: </span>CPA ≤ £{criteria.maxCPA} + Spend ≥ £{criteria.minSpend}
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+function WrappedApp(){
+  return React.createElement(ErrorBoundary,null,React.createElement(App,null));
+}
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(WrappedApp,null));
+
+  </script>
+</body>
+</html>
