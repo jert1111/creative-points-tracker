@@ -18,6 +18,10 @@
 </head>
 <body>
   <div id="root"></div>
+  <script>
+    const SUPABASE_URL = "https://wybutterksurcrpgphlv.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5YnV0dGVya3N1cmNycGdwaGx2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1MjkwMTUsImV4cCI6MjA5MDEwNTAxNX0.S_fg-tkSMprT6q6MmSv6_yIxi85ohcmsZ7qJw-M7ooE";
+  </script>
   <script type="text/babel" data-presets="react">
 const { useState, useEffect, useRef, useCallback } = React;
 const { Component } = React;
@@ -368,27 +372,27 @@ function App(){
   useEffect(()=>{
     (async()=>{
       try{
-        const safeGet=async(k)=>{try{return await Promise.resolve({value:localStorage.getItem(k)}).then(r=>r.value?r:null);}catch{return null;}};
-        const [res,resLa]=await Promise.all([
-          safeGet(STORAGE_KEY),
-          safeGet(STORAGE_KEY+"-la"),
-        ]);
-        if(res?.value){
-          const p=JSON.parse(res.value);
+                const supabaseGet=async()=>{
+                  try{
+                    const r=await fetch(`${SUPABASE_URL}/rest/v1/tracker_data?id=eq.main&select=payload,launched`,{
+                      headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY}
+                    });
+                    const rows=await r.json();
+                    if(!rows||!rows.length)return{payload:null,launched:null};
+                    return{payload:rows[0].payload,launched:rows[0].launched};
+                  }catch(e){console.error("Supabase load error",e);return{payload:null,launched:null};}
+                };
+                const {payload:p, launched:launchRaw}=await supabaseGet();
+        if(p){
           if(p.teamNames)setTeamNames(p.teamNames);
           if(p.weekData){const decompressed=decompressWeekData(p.weekData);setWeekData(decompressed.map(w=>w.length<TEAM_SIZE?[...w,...Array(TEAM_SIZE-w.length).fill(null).map(emptyInput)]:w).concat(Array(Math.max(0,13-decompressed.length)).fill(null).map(()=>Array(TEAM_SIZE).fill(null).map(emptyInput))));}
           const rawWins=p.winAds||[];
           if(rawWins.length)setWinAds(rawWins.map(a=>{const parsed=parseAdName(a.adName);const attrs=parsed&&parsed.convention!=="unknown"?getWinAttributions(parsed,a.winType,p.teamNames||DEFAULT_NAMES):a.attributions||[];const my=a.monthYear||parsed?.monthYear||null;return{...a,_parsed:{...parsed,monthYear:my},attributions:attrs};}));
           if(p.criteria)setCriteria(p.criteria);
-          // Legacy: launched stored in main payload
-          if(p.launched&&!resLa?.value)setLaunched(p.launched.map(a=>({...a,_parsed:parseAdName(a.adName)})));
         }
-        if(resLa?.value){
-          const raw=JSON.parse(resLa.value);
-          // Deduplicate by adName+week in case of historical double-imports
+        if(launchRaw&&Array.isArray(launchRaw)){
           const seen=new Set();
-          const deduped=raw.filter(a=>{const k=`${a.adName?.trim()}||${a.week}`;if(seen.has(k))return false;seen.add(k);return true;});
-          if(deduped.length!==raw.length)console.warn(`Deduped launched ads: ${raw.length} -> ${deduped.length}`);
+          const deduped=launchRaw.filter(a=>{const k=`${a.adName?.trim()}||${a.week}`;if(seen.has(k))return false;seen.add(k);return true;});
           setLaunched(deduped.map(a=>({...a,_parsed:parseAdName(a.adName)})));
         }
       }catch(e){console.error("Load error",e);}
@@ -422,8 +426,17 @@ function App(){
         console.log(`Save — main:${kb1}KB launched:${kb2}KB | ads:${launchClean.length}`);
         if(payload1.length>4500000) throw new Error(`Main payload too large: ${kb1}KB`);
         if(payload2.length>4500000) throw new Error(`Launched payload too large: ${kb2}KB`);
-        localStorage.setItem(STORAGE_KEY,payload1);
-        localStorage.setItem(STORAGE_KEY+"-la",payload2);
+        const saveRes=await fetch(`${SUPABASE_URL}/rest/v1/tracker_data`,{
+          method:"POST",
+          headers:{
+            "apikey":SUPABASE_KEY,
+            "Authorization":"Bearer "+SUPABASE_KEY,
+            "Content-Type":"application/json",
+            "Prefer":"resolution=merge-duplicates"
+          },
+          body:JSON.stringify({id:"main",payload:JSON.parse(payload1),launched:JSON.parse(payload2),updated_at:new Date().toISOString()})
+        });
+        if(!saveRes.ok){const err=await saveRes.text();throw new Error(`Supabase error: ${saveRes.status} ${err}`);}
         setSave("saved");setSaveError("");
       }catch(e){
         console.error("Save error",e);
@@ -1599,8 +1612,17 @@ function App(){
                           p2=JSON.stringify(launchClean);
                           step=`writing main (${Math.round(p1.length/1024)}KB)`;
                           console.log(`Restore — main:${Math.round(p1.length/1024)}KB launched:${Math.round(p2.length/1024)}KB (${launchClean.length} ads)`);
-                          localStorage.setItem(STORAGE_KEY,p1);
-                          localStorage.setItem(STORAGE_KEY+"-la",p2);
+                          const rRes=await fetch(`${SUPABASE_URL}/rest/v1/tracker_data`,{
+                            method:"POST",
+                            headers:{
+                              "apikey":SUPABASE_KEY,
+                              "Authorization":"Bearer "+SUPABASE_KEY,
+                              "Content-Type":"application/json",
+                              "Prefer":"resolution=merge-duplicates"
+                            },
+                            body:JSON.stringify({id:"main",payload:JSON.parse(p1),launched:JSON.parse(p2),updated_at:new Date().toISOString()})
+                          });
+                          if(!rRes.ok){const err=await rRes.text();throw new Error(`Supabase error: ${rRes.status} ${err}`);}
                           setSave("saved");setSaveError("");
                           setRestoreOk(true);
                           setTimeout(()=>{setExport(false);setRestoreText("");setRestoreOk(false);},1800);
